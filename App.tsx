@@ -1,45 +1,83 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StatusBar, StyleSheet } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { Colors } from './src/constants/colors';
+import RootNavigator from './src/navigation';
+import SplashScreen from './src/components/SplashScreen';
 import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+  loadVotesCache,
+} from './src/services/voteService';
+import {
+  loadNotificationsCache,
+  notificationEmitter,
+  NOTIFICATIONS_CHANGED_EVENT,
+  getNotificationCount,
+} from './src/services/notificationService';
+import {
+  setupPushNotifications,
+  onMessageListener,
+} from './src/services/pushNotificationService';
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+function AppContent() {
+  const { effectiveTheme } = useTheme();
+  const isDark = effectiveTheme === 'dark';
+  const [showSplash, setShowSplash] = useState(true);
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  useEffect(() => {
+    // Load caches, then hide splash
+    Promise.all([loadVotesCache(), loadNotificationsCache()]).finally(() => {
+      setNotificationCount(getNotificationCount());
+      setTimeout(() => setShowSplash(false), 1400);
+    });
+
+    // Push notifications
+    setupPushNotifications();
+    const unsubFCM = onMessageListener(() => {
+      setNotificationCount(getNotificationCount());
+    });
+
+    // Listen for notification changes
+    const onChanged = () => setNotificationCount(getNotificationCount());
+    notificationEmitter.on(NOTIFICATIONS_CHANGED_EVENT, onChanged);
+
+    return () => {
+      unsubFCM();
+      notificationEmitter.off(NOTIFICATIONS_CHANGED_EVENT, onChanged);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
+    <NavigationContainer>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={isDark ? Colors.gray900 : Colors.white}
+      />
+      {showSplash ? (
+        <SplashScreen />
+      ) : (
+        <RootNavigator notificationCount={notificationCount} />
+      )}
+    </NavigationContainer>
   );
 }
 
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
+export default function App() {
   return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <AppContent />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  root: { flex: 1 },
 });
-
-export default App;

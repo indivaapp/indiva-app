@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- İNDİVA turuncu — FCM bildirim ikonu rengi -->
+    <color name="notification_color">#F97316</color>
+    <!-- Uygulama ana rengi -->
+    <color name="primary">#F97316</color>
+</resources>

@@ -1,4 +1,4 @@
-package com.indivanative
+package com.indiva.app
 
 import android.app.Application
 import com.facebook.react.PackageList

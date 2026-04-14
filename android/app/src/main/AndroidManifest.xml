@@ -1,6 +1,20 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Temel izinler -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- AdMob / Google Ads için reklam kimliği izni (Android 13+) -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+
+    <!-- Bildirimler için izin (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <!-- Kamera ve galeri (AffiliateFormScreen resim yükleme) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
     <application
       android:name=".MainApplication"
@@ -11,6 +25,39 @@
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true">
+
+      <!-- AdMob Uygulama ID — kendi ID'nizle değiştirin -->
+      <!-- Format: ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY -->
+      <meta-data
+          android:name="com.google.android.gms.ads.APPLICATION_ID"
+          android:value="ca-app-pub-3940256099942544~3347511713"
+          tools:replace="android:value"/>
+      <!-- NOT: Yukarıdaki Google'ın test App ID'sidir.
+           Canlıya geçmeden önce AdMob konsolundan aldığınız gerçek ID ile değiştirin. -->
+
+      <!-- Firebase Cloud Messaging -->
+      <service
+          android:name="com.google.firebase.messaging.FirebaseMessagingService"
+          android:exported="false">
+          <intent-filter>
+              <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+          </intent-filter>
+      </service>
+
+      <!-- FCM varsayılan bildirim kanalı -->
+      <meta-data
+          android:name="com.google.firebase.messaging.default_notification_channel_id"
+          android:value="indiva_default_channel"
+          tools:replace="android:value"/>
+      <meta-data
+          android:name="com.google.firebase.messaging.default_notification_icon"
+          android:resource="@mipmap/ic_launcher"
+          tools:replace="android:resource"/>
+      <meta-data
+          android:name="com.google.firebase.messaging.default_notification_color"
+          android:resource="@color/notification_color"
+          tools:replace="android:resource"/>
+
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"

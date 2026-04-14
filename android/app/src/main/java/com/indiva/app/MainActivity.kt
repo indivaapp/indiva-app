@@ -1,4 +1,4 @@
-package com.indivanative
+package com.indiva.app
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
