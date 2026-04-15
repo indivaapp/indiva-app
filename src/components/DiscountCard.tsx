@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, memo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, memo } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Share,
   Linking,
+  Animated,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -42,6 +43,26 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
   const isServerExpired = discount.status === 'İndirim Bitti';
   const [countdown, setCountdown] = useState<string | null>(null);
   const [isHidden, setIsHidden] = useState(false);
+  const heartScale = useRef(new Animated.Value(1)).current;
+
+  // Kalp bounce animasyonu — favori durumu her değiştiğinde tetiklenir
+  useEffect(() => {
+    Animated.sequence([
+      Animated.spring(heartScale, {
+        toValue: 1.5,
+        friction: 3,
+        tension: 200,
+        useNativeDriver: true,
+      }),
+      Animated.spring(heartScale, {
+        toValue: 1,
+        friction: 4,
+        tension: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFavorite]);
 
   useEffect(() => {
     if (!isServerExpired || !discount.deleteAt) return;
@@ -197,7 +218,9 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
               style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.92)' }]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={{ fontSize: 16 }}>{isFavorite ? '❤️' : '🤍'}</Text>
+              <Animated.Text style={{ fontSize: 16, transform: [{ scale: heartScale }] }}>
+                {isFavorite ? '❤️' : '🤍'}
+              </Animated.Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
