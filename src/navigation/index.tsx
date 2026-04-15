@@ -2,6 +2,7 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { Discount } from '../types';
@@ -51,6 +52,7 @@ interface Props {
 function MainTabs({ notificationCount }: { notificationCount: number }) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
@@ -59,8 +61,8 @@ function MainTabs({ notificationCount }: { notificationCount: number }) {
         tabBarStyle: {
           backgroundColor: isDark ? Colors.gray800 : Colors.white,
           borderTopColor: isDark ? Colors.gray700 : Colors.gray200,
-          height: 64,
-          paddingBottom: 8,
+          height: 64 + insets.bottom,
+          paddingBottom: insets.bottom + 8,
         },
         tabBarActiveTintColor: Colors.orange,
         tabBarInactiveTintColor: isDark ? Colors.gray400 : Colors.gray500,
