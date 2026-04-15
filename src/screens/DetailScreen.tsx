@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,9 @@ import {
   Dimensions,
   Modal,
   Image,
+  Animated,
+  PanResponder,
+  Easing,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -64,7 +67,7 @@ function timeAgoStr(createdAt: any): string {
 }
 
 export default function DetailScreen({ route }: Props) {
-  const { id, discount: routeDiscount, discountList: routeList } = route.params;
+  const { id, discount: routeDiscount, discountList: routeList, direction } = route.params;
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const { effectiveTheme } = useTheme();
@@ -81,6 +84,12 @@ export default function DetailScreen({ route }: Props) {
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [expireCountdown, setExpireCountdown] = useState('');
 
+  // Animasyon değerleri
+  const slideX    = useRef(new Animated.Value(0)).current;
+  const heartScale = useRef(new Animated.Value(1)).current;
+  const titleAnim  = useRef(new Animated.Value(0)).current;
+  const priceAnim  = useRef(new Animated.Value(0)).current;
+
   const currentIndex = routeList ? routeList.findIndex((d: Discount) => d.id === id) : -1;
   const hasPrev = currentIndex > 0;
   const hasNext = routeList !== null && routeList !== undefined && currentIndex >= 0 && currentIndex < (routeList?.length ?? 0) - 1;
@@ -88,6 +97,46 @@ export default function DetailScreen({ route }: Props) {
   const bg = isDark ? Colors.gray900 : Colors.gray100;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
   const textColor = isDark ? Colors.white : Colors.gray800;
+
+  // Giriş animasyonu: yön bilgisine göre sağdan/soldan kayar gelir
+  useEffect(() => {
+    if (direction === 'next') {
+      slideX.setValue(SCREEN_W * 0.28);
+    } else if (direction === 'prev') {
+      slideX.setValue(-SCREEN_W * 0.28);
+    } else {
+      return;
+    }
+    Animated.spring(slideX, {
+      toValue: 0,
+      friction: 9,
+      tension: 80,
+      useNativeDriver: true,
+    }).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Başlık ve fiyat kartı giriş animasyonu
+  useEffect(() => {
+    if (!discount) return;
+    titleAnim.setValue(0);
+    priceAnim.setValue(0);
+    Animated.stagger(110, [
+      Animated.timing(titleAnim, {
+        toValue: 1,
+        duration: 360,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(priceAnim, {
+        toValue: 1,
+        duration: 360,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discount?.id]);
 
   // Load interstitial ad
   useEffect(() => {
@@ -151,8 +200,41 @@ export default function DetailScreen({ route }: Props) {
     const targetIndex = dir === 'prev' ? currentIndex - 1 : currentIndex + 1;
     if (targetIndex < 0 || targetIndex >= routeList.length) return;
     const target = routeList[targetIndex];
-    navigation.replace('Detail', { id: target.id, discount: target, discountList: routeList });
+    navigation.replace('Detail', { id: target.id, discount: target, discountList: routeList, direction: dir });
   }, [routeList, currentIndex, navigation]);
+
+  // Yatay kaydırma ile ilanlar arası geçiş
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gs) =>
+        Math.abs(gs.dx) > Math.abs(gs.dy) * 2 && Math.abs(gs.dx) > 14,
+      onMoveShouldSetPanResponderCapture: () => false,
+      onPanResponderMove: (_, gs) => {
+        if (gs.dx < 0 && (routeList !== null && routeList !== undefined && currentIndex >= 0 && currentIndex < (routeList?.length ?? 0) - 1)) {
+          slideX.setValue(gs.dx * 0.65);
+        } else if (gs.dx > 0 && currentIndex > 0) {
+          slideX.setValue(gs.dx * 0.65);
+        }
+      },
+      onPanResponderRelease: (_, gs) => {
+        const threshold = SCREEN_W * 0.28;
+        const hasN = routeList !== null && routeList !== undefined && currentIndex >= 0 && currentIndex < (routeList?.length ?? 0) - 1;
+        const hasP = currentIndex > 0;
+        if ((gs.dx < -threshold || (gs.dx < -50 && gs.vx < -0.4)) && hasN) {
+          Animated.timing(slideX, { toValue: -SCREEN_W, duration: 180, useNativeDriver: true }).start(() => navigateToDiscount('next'));
+        } else if ((gs.dx > threshold || (gs.dx > 50 && gs.vx > 0.4)) && hasP) {
+          Animated.timing(slideX, { toValue: SCREEN_W, duration: 180, useNativeDriver: true }).start(() => navigateToDiscount('prev'));
+        } else {
+          Animated.spring(slideX, { toValue: 0, friction: 7, tension: 100, useNativeDriver: true }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(slideX, { toValue: 0, friction: 7, tension: 100, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
 
   if (isLoading) {
     return (
@@ -192,6 +274,10 @@ export default function DetailScreen({ route }: Props) {
   };
 
   const handleToggleFavorite = async () => {
+    Animated.sequence([
+      Animated.spring(heartScale, { toValue: 1.45, friction: 3, tension: 200, useNativeDriver: true }),
+      Animated.spring(heartScale, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }),
+    ]).start();
     const next = isFavorite
       ? favorites.filter(f => f !== discount.id)
       : [...favorites, discount.id];
@@ -228,12 +314,11 @@ export default function DetailScreen({ route }: Props) {
 
   return (
     <>
-      <ScrollView
-        style={[styles.container, { backgroundColor: bg }]}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
-        showsVerticalScrollIndicator={false}
+      <Animated.View
+        style={[styles.swipeWrapper, { backgroundColor: bg, transform: [{ translateX: slideX }] }]}
+        {...panResponder.panHandlers}
       >
-        {/* Back button + navigation */}
+        {/* Sabit üst bar — scroll edilmez */}
         <View style={[styles.topBar, { paddingTop: insets.top, backgroundColor: bg }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={{ color: Colors.orange, fontSize: 16 }}>← Geri</Text>
@@ -252,6 +337,11 @@ export default function DetailScreen({ route }: Props) {
           </View>
         </View>
 
+        <ScrollView
+          style={[styles.container, { backgroundColor: bg }]}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+          showsVerticalScrollIndicator={false}
+        >
         <View style={{ padding: 12, gap: 10 }}>
           {/* Hero image */}
           <TouchableOpacity
@@ -307,7 +397,14 @@ export default function DetailScreen({ route }: Props) {
           )}
 
           {/* Title card */}
-          <View style={[styles.card, { backgroundColor: cardBg }]}>
+          <Animated.View style={[
+            styles.card,
+            {
+              backgroundColor: isDark ? '#1e2c3a' : '#f5f8ff',
+              opacity: titleAnim,
+              transform: [{ translateY: titleAnim.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+            },
+          ]}>
             <View style={styles.titleRowTop}>
               <View style={[styles.catBadge, { backgroundColor: isDark ? Colors.orange + '33' : Colors.orange + '22' }]}>
                 <Text style={[styles.catBadgeText, { color: Colors.orange }]}>{discount.category}</Text>
@@ -320,11 +417,19 @@ export default function DetailScreen({ route }: Props) {
                 <Text style={{ color: Colors.white, fontSize: 12, fontWeight: '800' }}>👑 EN UYGUN FİYAT</Text>
               </View>
             )}
-          </View>
+          </Animated.View>
 
           {/* Price card */}
           {(discount.newPrice > 0 || discount.oldPrice > 0) && (
-            <View style={[styles.card, styles.priceCard, { backgroundColor: isDark ? '#1a1a2e' : '#fff7f0' }]}>
+            <Animated.View style={[
+              styles.card,
+              styles.priceCard,
+              {
+                backgroundColor: isDark ? '#1a1a2e' : '#fff7f0',
+                opacity: priceAnim,
+                transform: [{ translateY: priceAnim.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+              },
+            ]}>
               <View style={styles.priceTopRow}>
                 <Text style={[styles.sadesceLabel, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>SADECE</Text>
                 {discountPercentage > 0 && (
@@ -360,7 +465,7 @@ export default function DetailScreen({ route }: Props) {
                   <Text style={{ fontSize: 28 }}>💰</Text>
                 </View>
               )}
-            </View>
+            </Animated.View>
           )}
 
           {/* Favorite + Share */}
@@ -369,7 +474,9 @@ export default function DetailScreen({ route }: Props) {
               onPress={handleToggleFavorite}
               style={[styles.actionBtn, { backgroundColor: cardBg, borderColor: isFavorite ? Colors.red500 : (isDark ? Colors.gray700 : Colors.gray200) }]}
             >
-              <Text style={{ fontSize: 16 }}>{isFavorite ? '❤️' : '🤍'}</Text>
+              <Animated.Text style={{ fontSize: 16, transform: [{ scale: heartScale }] }}>
+                {isFavorite ? '❤️' : '🤍'}
+              </Animated.Text>
               <Text style={[styles.actionBtnText, { color: isFavorite ? Colors.red500 : (isDark ? Colors.gray300 : Colors.gray600) }]}>
                 {isFavorite ? 'Favorilendi' : 'Favorile'}
               </Text>
@@ -500,7 +607,8 @@ export default function DetailScreen({ route }: Props) {
             </View>
           )}
         </View>
-      </ScrollView>
+        </ScrollView>
+      </Animated.View>
 
       {/* Lightbox modal */}
       <Modal visible={lightboxVisible} transparent animationType="fade">
@@ -549,6 +657,7 @@ function renderVoteBars(activeRatio: number, expiredRatio: number, isDark: boole
 }
 
 const styles = StyleSheet.create({
+  swipeWrapper: { flex: 1, overflow: 'hidden' },
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   topBar: {

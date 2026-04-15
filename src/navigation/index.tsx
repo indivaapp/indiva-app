@@ -24,7 +24,7 @@ import AdvertiseFormScreen from '../screens/AdvertiseFormScreen';
 
 export type RootStackParamList = {
   MainTabs: undefined;
-  Detail: { id: string; discount?: Discount; discountList?: Discount[] };
+  Detail: { id: string; discount?: Discount; discountList?: Discount[]; direction?: 'next' | 'prev' };
   Notifications: undefined;
   AktuelDetail: { storeName: string };
   ProfileHelp: undefined;
