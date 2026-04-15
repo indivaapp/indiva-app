@@ -194,7 +194,7 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
           {!isAd && (
             <TouchableOpacity
               onPress={onToggleFavorite}
-              style={styles.actionBtn}
+              style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.92)' }]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={{ fontSize: 16 }}>{isFavorite ? '❤️' : '🤍'}</Text>
@@ -202,7 +202,7 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
           )}
           <TouchableOpacity
             onPress={handleShare}
-            style={styles.actionBtn}
+            style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.92)' }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={{ fontSize: 16 }}>📤</Text>
@@ -356,7 +356,6 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   actionBtn: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
     borderRadius: 99,
     width: 32,
     height: 32,

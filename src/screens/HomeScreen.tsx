@@ -232,12 +232,28 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       {/* Sticky header */}
-      <View style={[styles.header, { backgroundColor: headerBg, paddingTop: insets.top }]}>
-        {/* Top row: logo + bell */}
-        <View style={styles.headerRow}>
+      <View style={[styles.header, { backgroundColor: headerBg }]}>
+        {/* Tek satır: logo + arama çubuğu + bildirim butonu */}
+        <View style={[styles.headerRow, { paddingTop: insets.top }]}>
           <Text style={[styles.logo, { color: Colors.orange }]}>İNDİVA</Text>
+          <View style={[styles.searchBar, { backgroundColor: inputBg }]}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={[styles.searchInput, { color: textColor }]}
+              placeholder="Ara..."
+              placeholderTextColor={isDark ? Colors.gray400 : Colors.gray500}
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+              returnKeyType="search"
+            />
+            {searchTerm.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchTerm('')}>
+                <Text style={{ color: Colors.gray400, fontSize: 16 }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <TouchableOpacity
-            style={styles.bellBtn}
+            style={[styles.bellBtn, { backgroundColor: inputBg }]}
             onPress={() => navigation.navigate('Notifications')}
           >
             <Text style={styles.bellIcon}>🔔</Text>
@@ -247,23 +263,6 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
               </View>
             )}
           </TouchableOpacity>
-        </View>
-        {/* Search bar */}
-        <View style={[styles.searchBar, { backgroundColor: inputBg }]}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={[styles.searchInput, { color: textColor }]}
-            placeholder="İndirim ara..."
-            placeholderTextColor={isDark ? Colors.gray400 : Colors.gray500}
-            value={searchTerm}
-            onChangeText={setSearchTerm}
-            returnKeyType="search"
-          />
-          {searchTerm.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchTerm('')}>
-              <Text style={{ color: Colors.gray400, fontSize: 16 }}>✕</Text>
-            </TouchableOpacity>
-          )}
         </View>
         {/* Category filter */}
         <ScrollView
@@ -385,21 +384,30 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 10,
+    gap: 10,
   },
   logo: {
     fontSize: 22,
     fontWeight: '900',
     letterSpacing: 2,
+    flexShrink: 0,
   },
-  bellBtn: { position: 'relative', padding: 4 },
-  bellIcon: { fontSize: 22 },
+  bellBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    position: 'relative',
+  },
+  bellIcon: { fontSize: 18 },
   badge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
+    top: 2,
+    right: 2,
     backgroundColor: Colors.red500,
     borderRadius: 8,
     minWidth: 16,
@@ -410,16 +418,15 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: Colors.white, fontSize: 9, fontWeight: '800' },
   searchBar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 12,
-    marginBottom: 8,
-    borderRadius: 12,
+    borderRadius: 25,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     gap: 8,
   },
-  searchIcon: { fontSize: 16 },
+  searchIcon: { fontSize: 15 },
   searchInput: { flex: 1, fontSize: 14, padding: 0 },
   categoriesScroll: { marginBottom: 8 },
   categoriesContent: { paddingHorizontal: 12, gap: 8 },
