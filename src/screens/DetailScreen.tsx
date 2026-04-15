@@ -259,12 +259,6 @@ export default function DetailScreen({ route }: Props) {
             onPress={() => setLightboxVisible(true)}
             activeOpacity={0.9}
           >
-            <OptimizedImage
-              src={discount.imageUrl}
-              alt={discount.title}
-              containerStyle={StyleSheet.absoluteFill}
-              resizeMode="cover"
-            />
             {/* Blur bg */}
             <Image
               source={{ uri: discount.imageUrl }}

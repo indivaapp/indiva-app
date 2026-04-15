@@ -52,8 +52,9 @@ export default function AktuelDetailScreen({ route }: Props) {
         <Text style={{ color: Colors.red500, fontSize: 14, textAlign: 'center', padding: 20 }}>{error}</Text>
         <TouchableOpacity
           onPress={() => {
+            setError('');
             setIsLoading(true);
-            fetchBrochuresByStore(storeName).then(setBrochures).catch(() => {}).finally(() => setIsLoading(false));
+            fetchBrochuresByStore(storeName).then(setBrochures).catch(() => setError('Kataloglar yüklenirken hata oluştu.')).finally(() => setIsLoading(false));
           }}
           style={{ marginTop: 12 }}
         >
