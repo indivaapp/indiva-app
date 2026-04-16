@@ -169,19 +169,17 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     });
   }, [discounts, searchTerm, selectedCategory, votes]);
 
-  // Build list rows: 3 pairs → card-ad → 2 pairs → banner → repeat
-  // Card-ad sits in the grid like a discount card; banner is a full-width strip
+  // Her 6 indirim kartından sonra 1 reklam kartı gelir (grid'de tek slot)
   type HomeRow =
     | { type: 'pair'; left: Discount; right: Discount | null; pairIndex: number }
-    | { type: 'card-ad'; key: string }
-    | { type: 'banner'; key: string };
+    | { type: 'ad-pair'; right: Discount | null; pairIndex: number };
 
   const listItems = useMemo<HomeRow[]>(() => {
     const rows: HomeRow[] = [];
     let i = 0;
 
     while (i < filteredDiscounts.length) {
-      // 3 pairs of cards = 6 discounts
+      // 6 indirim kartı (3 çift)
       for (let p = 0; p < 3 && i < filteredDiscounts.length; p++) {
         rows.push({
           type: 'pair',
@@ -192,50 +190,42 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         i += 2;
       }
 
-      // Card-sized ad (blends into the grid, same card style)
-      rows.push({ type: 'card-ad', key: `card-ad-${i}` });
-
-      // 2 more pairs = 4 discounts (then banner comes)
-      for (let p = 0; p < 2 && i < filteredDiscounts.length; p++) {
-        rows.push({
-          type: 'pair',
-          left: filteredDiscounts[i],
-          right: filteredDiscounts[i + 1] ?? null,
-          pairIndex: i,
-        });
-        i += 2;
-      }
-
-      // Full-width banner strip (2 rows after the card-ad)
-      rows.push({ type: 'banner', key: `banner-${i}` });
+      // Reklam sol slotta, yanında 1 indirim kartı
+      const adRight = filteredDiscounts[i] ?? null;
+      if (adRight) i++;
+      rows.push({ type: 'ad-pair', right: adRight, pairIndex: i });
     }
 
     return rows;
   }, [filteredDiscounts]);
 
   const renderItem = ({ item }: { item: HomeRow }) => {
-    // Card-slot ad: full-width container styled like a card row, fills grid width
-    if (item.type === 'card-ad') {
+    // Reklam kartı: sol slotta indirim kartıyla aynı boyutta
+    if (item.type === 'ad-pair') {
       return (
-        <View style={[styles.cardAdContainer, { backgroundColor: cardBg }]}>
-          <BannerAd
-            unitId={CARD_AD_UNIT_ID}
-            size={BannerAdSize.INLINE_ADAPTIVE_BANNER}
-            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-          />
-        </View>
-      );
-    }
-
-    // Full-width banner strip
-    if (item.type === 'banner') {
-      return (
-        <View style={styles.adContainer}>
-          <BannerAd
-            unitId={BANNER_AD_UNIT_ID}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-          />
+        <View style={styles.row}>
+          <View style={styles.cardWrapper}>
+            <View style={[styles.adCardSlot, { backgroundColor: cardBg }]}>
+              <BannerAd
+                unitId={CARD_AD_UNIT_ID}
+                size={BannerAdSize.MEDIUM_RECTANGLE}
+                requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+              />
+            </View>
+          </View>
+          <View style={styles.cardWrapper}>
+            {item.right ? (
+              <DiscountCard
+                discount={item.right}
+                isFavorite={favorites.includes(item.right.id)}
+                onToggleFavorite={() => handleToggleFavorite(item.right!.id)}
+                isExpired={isDiscountExpired(item.right.id, votes)}
+                discountList={filteredDiscounts}
+              />
+            ) : (
+              <View />
+            )}
+          </View>
         </View>
       );
     }
@@ -524,21 +514,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 32,
   },
-  // Card-slot ad: mimics the look of a content card row
-  cardAdContainer: {
-    marginBottom: 8,
+  adCardSlot: {
+    flex: 1,
     borderRadius: 16,
     overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07,
     shadowRadius: 4,
     elevation: 3,
-  },
-  // Banner strip: centered, full-width
-  adContainer: {
-    alignItems: 'center',
-    marginVertical: 4,
-    overflow: 'hidden',
   },
 });
