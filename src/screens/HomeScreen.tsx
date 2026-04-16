@@ -28,8 +28,7 @@ import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
-// In production replace with your real ad unit IDs:
-const BANNER_AD_UNIT_ID = __DEV__ ? TestIds.BANNER : 'ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY';
+const BANNER_AD_UNIT_ID = __DEV__ ? TestIds.BANNER : 'ca-app-pub-3675503435035155/8261572668';
 
 const ITEMS_PER_PAGE_DISPLAY = 4; // show ad after every N cards
 
