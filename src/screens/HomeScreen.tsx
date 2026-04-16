@@ -14,6 +14,7 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import { fetchDiscounts, getOfflineCache } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -27,6 +28,9 @@ import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
+const BANNER_AD_UNIT_ID = __DEV__
+  ? 'ca-app-pub-3940256099942544/6300978111'
+  : 'ca-app-pub-3675503435035155/8261572668';
 
 interface HomeScreenProps {
   notificationCount: number;
@@ -162,7 +166,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   }, [discounts, searchTerm, selectedCategory, votes]);
 
   type HomeRow =
-    | { type: 'pair'; left: Discount; right: Discount | null; pairIndex: number };
+    | { type: 'pair'; left: Discount; right: Discount | null; pairIndex: number }
+    | { type: 'banner'; key: string };
 
   const listItems = useMemo<HomeRow[]>(() => {
     const rows: HomeRow[] = [];
@@ -173,13 +178,28 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         right: filteredDiscounts[i + 1] ?? null,
         pairIndex: i,
       });
+      // Her 3 çiftten (6 ilanından) sonra banner ekle
+      const pairIndex = rows.filter(r => r.type === 'pair').length;
+      if (pairIndex % 3 === 0) {
+        rows.push({ type: 'banner', key: `banner-${i}` });
+      }
     }
     return rows;
   }, [filteredDiscounts]);
 
   const renderItem = ({ item }: { item: HomeRow }) => {
+    if (item.type === 'banner') {
+      return (
+        <View style={styles.bannerContainer}>
+          <BannerAd
+            unitId={BANNER_AD_UNIT_ID}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          />
+        </View>
+      );
+    }
 
-    // Normal discount pair row
     return (
       <View style={styles.row}>
         <View style={styles.cardWrapper}>
@@ -462,5 +482,11 @@ const styles = StyleSheet.create({
   allDoneContainer: {
     alignItems: 'center',
     paddingVertical: 32,
+  },
+  bannerContainer: {
+    alignItems: 'center',
+    width: '100%',
+    minHeight: 50,
+    marginVertical: 4,
   },
 });
