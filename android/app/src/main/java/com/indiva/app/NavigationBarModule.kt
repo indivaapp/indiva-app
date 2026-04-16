@@ -15,7 +15,7 @@ class NavigationBarModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun setColor(colorString: String, lightIcons: Boolean) {
-        val activity = currentActivity ?: return
+        val activity = reactApplicationContext.currentActivity ?: return
         activity.runOnUiThread {
             try {
                 val color = Color.parseColor(colorString)
