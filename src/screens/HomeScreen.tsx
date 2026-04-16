@@ -228,6 +228,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const headerBg = isDark ? Colors.gray800 : Colors.white;
   const inputBg = isDark ? Colors.gray700 : Colors.gray100;
   const textColor = isDark ? Colors.white : Colors.gray800;
+  const cardBg = isDark ? Colors.gray800 : Colors.white;
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
