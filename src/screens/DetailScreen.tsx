@@ -19,7 +19,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
+import { InterstitialAd, BannerAd, BannerAdSize, AdEventType, TestIds } from 'react-native-google-mobile-ads';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { getDiscountById, fetchSimilarDiscounts } from '../services/firebaseService';
@@ -40,6 +40,14 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const INTERSTITIAL_AD_UNIT_ID = __DEV__
   ? TestIds.INTERSTITIAL
   : 'ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ';
+
+const BANNER_AD_UNIT_ID = __DEV__
+  ? TestIds.ADAPTIVE_BANNER
+  : 'ca-app-pub-XXXXXXXXXXXXXXXX/AAAAAAAAAAA';
+
+const MREC_AD_UNIT_ID = __DEV__
+  ? TestIds.ADAPTIVE_BANNER
+  : 'ca-app-pub-XXXXXXXXXXXXXXXX/BBBBBBBBBBB';
 
 const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
   requestNonPersonalizedAdsOnly: true,
@@ -392,18 +400,6 @@ export default function DetailScreen({ route }: Props) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={{ color: Colors.orange, fontSize: 16 }}>← Geri</Text>
           </TouchableOpacity>
-          <View style={styles.navButtons}>
-            {hasPrev && (
-              <TouchableOpacity onPress={() => navigateToDiscount('prev')} style={styles.navBtn}>
-                <Text style={{ color: Colors.orange }}>‹ Önceki</Text>
-              </TouchableOpacity>
-            )}
-            {hasNext && (
-              <TouchableOpacity onPress={() => navigateToDiscount('next')} style={styles.navBtn}>
-                <Text style={{ color: Colors.orange }}>Sonraki ›</Text>
-              </TouchableOpacity>
-            )}
-          </View>
         </View>
 
         <ScrollView
@@ -487,6 +483,13 @@ export default function DetailScreen({ route }: Props) {
               </View>
             )}
           </Animated.View>
+
+          {/* Banner reklam — başlık ile fiyat kartı arasında */}
+          <BannerAd
+            unitId={BANNER_AD_UNIT_ID}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          />
 
           {/* Price card */}
           {(d.newPrice > 0 || d.oldPrice > 0) && (
@@ -650,6 +653,15 @@ export default function DetailScreen({ route }: Props) {
             <View style={[styles.divLine, { backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }]} />
           </View>
 
+          {/* Native banner reklam alanı */}
+          <View style={styles.mrecWrapper}>
+            <BannerAd
+              unitId={MREC_AD_UNIT_ID}
+              size={BannerAdSize.MEDIUM_RECTANGLE}
+              requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+            />
+          </View>
+
           {/* Similar discounts */}
           {similarDiscounts.length > 0 && (
             <View>
@@ -782,8 +794,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   backBtn: { padding: 4 },
-  navButtons: { flexDirection: 'row', gap: 12 },
-  navBtn: { padding: 4 },
   heroContainer: {
     height: 220,
     borderRadius: 20,
@@ -931,6 +941,7 @@ const styles = StyleSheet.create({
   voteBarFill: { height: '100%', borderRadius: 4 },
   voteFooter: { fontSize: 11, textAlign: 'center', lineHeight: 16, marginTop: 8 },
   watermark: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+  mrecWrapper: { alignItems: 'center', marginVertical: 4 },
   divLine: { flex: 1, height: 1 },
   watermarkText: { fontSize: 10, fontWeight: '900', letterSpacing: 3 },
   similarTitle: { fontSize: 16, fontWeight: '800', marginBottom: 12 },
