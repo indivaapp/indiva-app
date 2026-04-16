@@ -11,7 +11,7 @@ import {
   ScrollView,
   StatusBar,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
@@ -28,9 +28,16 @@ import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
-const BANNER_AD_UNIT_ID = __DEV__ ? TestIds.BANNER : 'ca-app-pub-3675503435035155/8261572668';
+// In production replace with your real ad unit IDs:
+// Card-slot ad (INLINE_ADAPTIVE_BANNER — fills card width, blends into 2-column grid)
+const CARD_AD_UNIT_ID = __DEV__
+  ? TestIds.INLINE_ADAPTIVE_BANNER
+  : 'ca-app-pub-3675503435035155/8261572668';
 
-const ITEMS_PER_PAGE_DISPLAY = 4; // show ad after every N cards
+// Row banner ad (ANCHORED_ADAPTIVE_BANNER — full-width strip between rows)
+const BANNER_AD_UNIT_ID = __DEV__
+  ? TestIds.ADAPTIVE_BANNER
+  : 'ca-app-pub-3675503435035155/8261572668';
 
 interface HomeScreenProps {
   notificationCount: number;
@@ -74,11 +81,15 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const allCategories = ['Tümü', ...CATEGORIES];
 
   useEffect(() => {
-    getFavoriteIds().then(setFavorites);
     loadVotesCache().then(() => setVotes(getVotes()));
     loadInitial();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sekme odağa geldiğinde favorileri yenile (FavoritesScreen'deki değişiklikler yansısın)
+  useFocusEffect(useCallback(() => {
+    getFavoriteIds().then(setFavorites);
+  }, []));
 
   const loadInitial = async () => {
     if (isLoadingRef.current) return;
@@ -161,40 +172,78 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     });
   }, [discounts, searchTerm, selectedCategory, votes]);
 
-  // Build list items: inject ad banner every ITEMS_PER_PAGE_DISPLAY cards
-  type ListItem =
-    | { type: 'pair'; left: Discount; right: Discount | null; index: number }
-    | { type: 'ad'; key: string };
+  // Build list rows: 3 pairs → card-ad → 2 pairs → banner → repeat
+  // Card-ad sits in the grid like a discount card; banner is a full-width strip
+  type HomeRow =
+    | { type: 'pair'; left: Discount; right: Discount | null; pairIndex: number }
+    | { type: 'card-ad'; key: string }
+    | { type: 'banner'; key: string };
 
-  const listItems = useMemo<ListItem[]>(() => {
-    const items: ListItem[] = [];
-    for (let i = 0; i < filteredDiscounts.length; i += 2) {
-      // inject ad before each group of items (except very first)
-      if (i > 0 && i % (ITEMS_PER_PAGE_DISPLAY * 2) === 0) {
-        items.push({ type: 'ad', key: `ad_${i}` });
+  const listItems = useMemo<HomeRow[]>(() => {
+    const rows: HomeRow[] = [];
+    let i = 0;
+
+    while (i < filteredDiscounts.length) {
+      // 3 pairs of cards = 6 discounts
+      for (let p = 0; p < 3 && i < filteredDiscounts.length; p++) {
+        rows.push({
+          type: 'pair',
+          left: filteredDiscounts[i],
+          right: filteredDiscounts[i + 1] ?? null,
+          pairIndex: i,
+        });
+        i += 2;
       }
-      items.push({
-        type: 'pair',
-        left: filteredDiscounts[i],
-        right: filteredDiscounts[i + 1] ?? null,
-        index: i,
-      });
+
+      // Card-sized ad (blends into the grid, same card style)
+      rows.push({ type: 'card-ad', key: `card-ad-${i}` });
+
+      // 2 more pairs = 4 discounts (then banner comes)
+      for (let p = 0; p < 2 && i < filteredDiscounts.length; p++) {
+        rows.push({
+          type: 'pair',
+          left: filteredDiscounts[i],
+          right: filteredDiscounts[i + 1] ?? null,
+          pairIndex: i,
+        });
+        i += 2;
+      }
+
+      // Full-width banner strip (2 rows after the card-ad)
+      rows.push({ type: 'banner', key: `banner-${i}` });
     }
-    return items;
+
+    return rows;
   }, [filteredDiscounts]);
 
-  const renderItem = ({ item }: { item: ListItem }) => {
-    if (item.type === 'ad') {
+  const renderItem = ({ item }: { item: HomeRow }) => {
+    // Card-slot ad: full-width container styled like a card row, fills grid width
+    if (item.type === 'card-ad') {
       return (
-        <View style={styles.adContainer}>
+        <View style={[styles.cardAdContainer, { backgroundColor: cardBg }]}>
           <BannerAd
-            unitId={BANNER_AD_UNIT_ID}
-            size={BannerAdSize.FULL_BANNER}
+            unitId={CARD_AD_UNIT_ID}
+            size={BannerAdSize.INLINE_ADAPTIVE_BANNER}
             requestOptions={{ requestNonPersonalizedAdsOnly: true }}
           />
         </View>
       );
     }
+
+    // Full-width banner strip
+    if (item.type === 'banner') {
+      return (
+        <View style={styles.adContainer}>
+          <BannerAd
+            unitId={BANNER_AD_UNIT_ID}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          />
+        </View>
+      );
+    }
+
+    // Normal discount pair row
     return (
       <View style={styles.row}>
         <View style={styles.cardWrapper}>
@@ -232,12 +281,28 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       {/* Sticky header */}
-      <View style={[styles.header, { backgroundColor: headerBg, paddingTop: insets.top }]}>
-        {/* Top row: logo + bell */}
-        <View style={styles.headerRow}>
+      <View style={[styles.header, { backgroundColor: headerBg }]}>
+        {/* Tek satır: logo + arama çubuğu + bildirim butonu */}
+        <View style={[styles.headerRow, { paddingTop: insets.top }]}>
           <Text style={[styles.logo, { color: Colors.orange }]}>İNDİVA</Text>
+          <View style={[styles.searchBar, { backgroundColor: inputBg }]}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={[styles.searchInput, { color: textColor }]}
+              placeholder="Ara..."
+              placeholderTextColor={isDark ? Colors.gray400 : Colors.gray500}
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+              returnKeyType="search"
+            />
+            {searchTerm.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchTerm('')}>
+                <Text style={{ color: Colors.gray400, fontSize: 16 }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <TouchableOpacity
-            style={styles.bellBtn}
+            style={[styles.bellBtn, { backgroundColor: inputBg }]}
             onPress={() => navigation.navigate('Notifications')}
           >
             <Text style={styles.bellIcon}>🔔</Text>
@@ -247,23 +312,6 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
               </View>
             )}
           </TouchableOpacity>
-        </View>
-        {/* Search bar */}
-        <View style={[styles.searchBar, { backgroundColor: inputBg }]}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={[styles.searchInput, { color: textColor }]}
-            placeholder="İndirim ara..."
-            placeholderTextColor={isDark ? Colors.gray400 : Colors.gray500}
-            value={searchTerm}
-            onChangeText={setSearchTerm}
-            returnKeyType="search"
-          />
-          {searchTerm.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchTerm('')}>
-              <Text style={{ color: Colors.gray400, fontSize: 16 }}>✕</Text>
-            </TouchableOpacity>
-          )}
         </View>
         {/* Category filter */}
         <ScrollView
@@ -337,7 +385,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         <FlatList
           data={listItems}
           keyExtractor={(item, index) =>
-            item.type === 'ad' ? item.key : `pair_${item.index}_${index}`
+            item.type === 'pair' ? `pair_${item.pairIndex}_${index}` : item.key
           }
           renderItem={renderItem}
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
@@ -385,21 +433,30 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 10,
+    gap: 10,
   },
   logo: {
     fontSize: 22,
     fontWeight: '900',
     letterSpacing: 2,
+    flexShrink: 0,
   },
-  bellBtn: { position: 'relative', padding: 4 },
-  bellIcon: { fontSize: 22 },
+  bellBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    position: 'relative',
+  },
+  bellIcon: { fontSize: 18 },
   badge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
+    top: 2,
+    right: 2,
     backgroundColor: Colors.red500,
     borderRadius: 8,
     minWidth: 16,
@@ -410,16 +467,15 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: Colors.white, fontSize: 9, fontWeight: '800' },
   searchBar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 12,
-    marginBottom: 8,
-    borderRadius: 12,
+    borderRadius: 25,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 9,
     gap: 8,
   },
-  searchIcon: { fontSize: 16 },
+  searchIcon: { fontSize: 15 },
   searchInput: { flex: 1, fontSize: 14, padding: 0 },
   categoriesScroll: { marginBottom: 8 },
   categoriesContent: { paddingHorizontal: 12, gap: 8 },
@@ -471,9 +527,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 32,
   },
+  // Card-slot ad: mimics the look of a content card row
+  cardAdContainer: {
+    marginBottom: 8,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  // Banner strip: centered, full-width
   adContainer: {
     alignItems: 'center',
-    marginVertical: 8,
+    marginVertical: 4,
     overflow: 'hidden',
   },
 });

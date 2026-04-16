@@ -170,7 +170,17 @@ export default function AdvertiseFormScreen() {
   );
 }
 
-function LabelInput({ label, value, onChangeText, bg, border, color, keyboardType }: any) {
+interface LabelInputProps {
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  bg: string;
+  border: string;
+  color: string;
+  keyboardType?: 'default' | 'email-address' | 'url' | 'numeric';
+}
+
+function LabelInput({ label, value, onChangeText, bg, border, color, keyboardType }: LabelInputProps) {
   return (
     <View>
       <Text style={[styles.labelText, { color }]}>{label}</Text>

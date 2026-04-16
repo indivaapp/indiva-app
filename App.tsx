@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StatusBar, StyleSheet } from 'react-native';
+import { StatusBar, StyleSheet, NativeModules, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -21,11 +21,23 @@ import {
   onMessageListener,
 } from './src/services/pushNotificationService';
 
+const { NavigationBar } = NativeModules;
+
 function AppContent() {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
   const [showSplash, setShowSplash] = useState(true);
   const [notificationCount, setNotificationCount] = useState(0);
+
+  // Sync Android system navigation bar color with app theme
+  useEffect(() => {
+    if (Platform.OS === 'android' && NavigationBar) {
+      NavigationBar.setColor(
+        isDark ? Colors.gray900 : Colors.gray50,
+        !isDark, // lightIcons = dark icons on light bg
+      );
+    }
+  }, [isDark]);
 
   useEffect(() => {
     // Load caches, then hide splash

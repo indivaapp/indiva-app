@@ -1,44 +1,82 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing, StatusBar } from 'react-native';
 import { Colors } from '../constants/colors';
 
 export default function SplashScreen() {
-  const scale = useRef(new Animated.Value(0.3)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const taglineOpacity = useRef(new Animated.Value(0)).current;
+  const textOpacity = useRef(new Animated.Value(0)).current;
+  const textScale  = useRef(new Animated.Value(0.82)).current;
+  const textTranslateY = useRef(new Animated.Value(24)).current;
+  const shimmerOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // 1. Metin giriş animasyonu
     Animated.parallel([
-      Animated.spring(scale, {
+      Animated.timing(textOpacity, {
         toValue: 1,
-        friction: 4,
-        tension: 60,
+        duration: 600,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-      Animated.timing(opacity, {
+      Animated.spring(textScale, {
         toValue: 1,
-        duration: 500,
+        friction: 7,
+        tension: 45,
+        useNativeDriver: true,
+      }),
+      Animated.timing(textTranslateY, {
+        toValue: 0,
+        duration: 600,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start(() => {
-      Animated.timing(taglineOpacity, {
-        toValue: 1,
-        duration: 400,
-        delay: 200,
-        useNativeDriver: true,
-      }).start();
+      // 2. Metin yerleştikten sonra hafif parlaklık efekti
+      Animated.sequence([
+        Animated.timing(shimmerOpacity, {
+          toValue: 0.35,
+          duration: 350,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(shimmerOpacity, {
+          toValue: 0,
+          duration: 350,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start();
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <View style={styles.container}>
-      <Animated.View style={[styles.logoContainer, { transform: [{ scale }], opacity }]}>
-        <Text style={styles.logoEmoji}>🔥</Text>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.orange} />
+
+      {/* Üstten hafif karartma katmanı — derinlik hissi */}
+      <View style={styles.topOverlay} pointerEvents="none" />
+
+      {/* Ana logo metni */}
+      <Animated.View
+        style={[
+          styles.logoWrapper,
+          {
+            opacity: textOpacity,
+            transform: [
+              { scale: textScale },
+              { translateY: textTranslateY },
+            ],
+          },
+        ]}
+      >
         <Text style={styles.logoText}>İNDİVA</Text>
+
+        {/* Parlaklık overlay */}
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.shimmer, { opacity: shimmerOpacity }]}
+        />
       </Animated.View>
-      <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
-        En sıcak fırsatlar burada
-      </Animated.Text>
     </View>
   );
 }
@@ -50,25 +88,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoContainer: {
-    alignItems: 'center',
-    gap: 8,
+  topOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '40%',
+    backgroundColor: 'rgba(0,0,0,0.06)',
   },
-  logoEmoji: {
-    fontSize: 56,
-    marginBottom: 4,
+  logoWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -40, // görsel olarak hafif yukarı kaydır
   },
   logoText: {
-    fontSize: 36,
+    fontSize: 56,
     fontWeight: '900',
     color: Colors.white,
-    letterSpacing: 6,
+    letterSpacing: 10,
+    includeFontPadding: false,
   },
-  tagline: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 16,
-    letterSpacing: 1,
+  shimmer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.white,
+    borderRadius: 4,
   },
 });

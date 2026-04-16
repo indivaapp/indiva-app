@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { submitPendingDiscount } from '../services/firebaseService';
 import { CATEGORIES } from '../constants/categories';
@@ -15,7 +17,7 @@ export default function AffiliateFormScreen() {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [productName, setProductName] = useState('');
   const [brand, setBrand] = useState('');

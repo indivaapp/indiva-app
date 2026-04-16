@@ -123,7 +123,7 @@ export default function NotificationsScreen() {
 
   const handlePress = (notif: Notification) => {
     if (notif.discountId) {
-      navigation.navigate('Detail', { id: notif.discountId, discount: undefined, discountList: undefined });
+      navigation.navigate('Detail', { id: notif.discountId });
     }
   };
 

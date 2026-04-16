@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,14 @@ import {
   Dimensions,
   Modal,
   Image,
+  Animated,
+  PanResponder,
+  Easing,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
+import { InterstitialAd, BannerAd, BannerAdSize, AdEventType, TestIds } from 'react-native-google-mobile-ads';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { getDiscountById, fetchSimilarDiscounts } from '../services/firebaseService';
@@ -37,6 +40,14 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const INTERSTITIAL_AD_UNIT_ID = __DEV__
   ? TestIds.INTERSTITIAL
   : 'ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ';
+
+const BANNER_AD_UNIT_ID = __DEV__
+  ? TestIds.ADAPTIVE_BANNER
+  : 'ca-app-pub-XXXXXXXXXXXXXXXX/AAAAAAAAAAA';
+
+const MREC_AD_UNIT_ID = __DEV__
+  ? TestIds.ADAPTIVE_BANNER
+  : 'ca-app-pub-XXXXXXXXXXXXXXXX/BBBBBBBBBBB';
 
 const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
   requestNonPersonalizedAdsOnly: true,
@@ -64,7 +75,7 @@ function timeAgoStr(createdAt: any): string {
 }
 
 export default function DetailScreen({ route }: Props) {
-  const { id, discount: routeDiscount, discountList: routeList } = route.params;
+  const { id, discount: routeDiscount, discountList: routeList, direction } = route.params;
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const { effectiveTheme } = useTheme();
@@ -81,13 +92,76 @@ export default function DetailScreen({ route }: Props) {
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [expireCountdown, setExpireCountdown] = useState('');
 
-  const currentIndex = routeList ? routeList.findIndex((d: Discount) => d.id === id) : -1;
+  // Animasyon değerleri
+  const slideX      = useRef(new Animated.Value(0)).current;
+  const inSlideX    = useRef(new Animated.Value(0)).current;
+  const heartScale  = useRef(new Animated.Value(1)).current;
+  const titleAnim   = useRef(new Animated.Value(0)).current;
+  const priceAnim   = useRef(new Animated.Value(0)).current;
+
+  // Yerel navigasyon state'i — navigation.replace yerine in-place geçiş
+  const [localDiscount, setLocalDiscount] = useState<Discount | null>(routeDiscount ?? null);
+  const [incomingDiscount, setIncomingDiscount] = useState<Discount | null>(null);
+  const [localIndex, setLocalIndex] = useState(
+    routeList ? routeList.findIndex((d: Discount) => d.id === id) : -1
+  );
+
+  const currentIndex = localIndex;
   const hasPrev = currentIndex > 0;
   const hasNext = routeList !== null && routeList !== undefined && currentIndex >= 0 && currentIndex < (routeList?.length ?? 0) - 1;
+
+  // Refs so PanResponder callbacks always see the latest values (avoids stale closures)
+  const localIndexRef = useRef(localIndex);
+  const doSlideRef = useRef<(dir: 'prev' | 'next') => void>(() => {});
+  const setIncomingRef = useRef(setIncomingDiscount);
+  const routeListRef = useRef(routeList);
+  localIndexRef.current = localIndex;
+  setIncomingRef.current = setIncomingDiscount;
+  routeListRef.current = routeList;
 
   const bg = isDark ? Colors.gray900 : Colors.gray100;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
   const textColor = isDark ? Colors.white : Colors.gray800;
+
+  // Giriş animasyonu: yön bilgisine göre sağdan/soldan kayar gelir
+  useEffect(() => {
+    if (direction === 'next') {
+      slideX.setValue(SCREEN_W * 0.28);
+    } else if (direction === 'prev') {
+      slideX.setValue(-SCREEN_W * 0.28);
+    } else {
+      return;
+    }
+    Animated.spring(slideX, {
+      toValue: 0,
+      friction: 9,
+      tension: 80,
+      useNativeDriver: true,
+    }).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Başlık ve fiyat kartı giriş animasyonu
+  useEffect(() => {
+    if (!discount) return;
+    titleAnim.setValue(0);
+    priceAnim.setValue(0);
+    Animated.stagger(110, [
+      Animated.timing(titleAnim, {
+        toValue: 1,
+        duration: 360,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(priceAnim, {
+        toValue: 1,
+        duration: 360,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discount?.id]);
 
   // Load interstitial ad
   useEffect(() => {
@@ -112,7 +186,7 @@ export default function DetailScreen({ route }: Props) {
       setIsLoading(true);
       getDiscountById(id)
         .then(d => {
-          if (d) setDiscount(d);
+          if (d) { setDiscount(d); setLocalDiscount(d); }
           else setError('İndirim detayı bulunamadı.');
         })
         .catch(() => setError('Yüklenirken hata oluştu.'))
@@ -146,13 +220,95 @@ export default function DetailScreen({ route }: Props) {
     return () => clearInterval(interval);
   }, [id, votes]);
 
-  const navigateToDiscount = useCallback((dir: 'prev' | 'next') => {
+  // navigation.replace yerine in-place geçiş — remount yok, kesintisiz animasyon
+  const doSlide = useCallback((dir: 'prev' | 'next') => {
     if (!routeList) return;
-    const targetIndex = dir === 'prev' ? currentIndex - 1 : currentIndex + 1;
+    const targetIndex = dir === 'next' ? localIndex + 1 : localIndex - 1;
     if (targetIndex < 0 || targetIndex >= routeList.length) return;
     const target = routeList[targetIndex];
-    navigation.replace('Detail', { id: target.id, discount: target, discountList: routeList });
-  }, [routeList, currentIndex, navigation]);
+
+    inSlideX.setValue(dir === 'next' ? SCREEN_W : -SCREEN_W);
+    setIncomingDiscount(target);
+
+    Animated.parallel([
+      Animated.timing(slideX, {
+        toValue: dir === 'next' ? -SCREEN_W : SCREEN_W,
+        duration: 260,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(inSlideX, {
+        toValue: 0,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setLocalDiscount(target);
+      setLocalIndex(targetIndex);
+      setIncomingDiscount(null);
+      slideX.setValue(0);
+      inSlideX.setValue(0);
+      titleAnim.setValue(0);
+      priceAnim.setValue(0);
+      Animated.stagger(110, [
+        Animated.timing(titleAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(priceAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]).start();
+    });
+  }, [routeList, localIndex, slideX, inSlideX, titleAnim, priceAnim]);
+
+  const navigateToDiscount = doSlide;
+  doSlideRef.current = doSlide;
+
+  // Yatay kaydırma ile ilanlar arası geçiş
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_, gs) =>
+        Math.abs(gs.dx) > Math.abs(gs.dy) * 2 && Math.abs(gs.dx) > 12,
+      onMoveShouldSetPanResponderCapture: () => false,
+      onPanResponderMove: (_, gs) => {
+        const idx = localIndexRef.current;
+        const list = routeListRef.current;
+        const hasN = list != null && idx < (list.length - 1);
+        const hasP = idx > 0;
+        if (gs.dx < 0 && hasN) {
+          // Show incoming preview if not already set
+          const nextItem = list![idx + 1];
+          setIncomingRef.current(prev => prev?.id === nextItem.id ? prev : nextItem);
+          slideX.setValue(gs.dx * 0.7);
+          inSlideX.setValue(SCREEN_W + gs.dx * 0.7);
+        } else if (gs.dx > 0 && hasP) {
+          const prevItem = list![idx - 1];
+          setIncomingRef.current(prev => prev?.id === prevItem.id ? prev : prevItem);
+          slideX.setValue(gs.dx * 0.7);
+          inSlideX.setValue(-SCREEN_W + gs.dx * 0.7);
+        }
+      },
+      onPanResponderRelease: (_, gs) => {
+        const idx = localIndexRef.current;
+        const list = routeListRef.current;
+        const threshold = SCREEN_W * 0.25;
+        const hasN = list != null && idx < (list.length - 1);
+        const hasP = idx > 0;
+        if ((gs.dx < -threshold || (gs.dx < -40 && gs.vx < -0.5)) && hasN) {
+          doSlideRef.current('next');
+        } else if ((gs.dx > threshold || (gs.dx > 40 && gs.vx > 0.5)) && hasP) {
+          doSlideRef.current('prev');
+        } else {
+          setIncomingDiscount(null);
+          Animated.spring(slideX, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
+          Animated.spring(inSlideX, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        setIncomingDiscount(null);
+        Animated.spring(slideX, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
 
   if (isLoading) {
     return (
@@ -169,40 +325,47 @@ export default function DetailScreen({ route }: Props) {
     );
   }
 
-  const isExpired = isDiscountExpired(discount.id, votes);
-  const isAd = discount.isAd === true;
-  const isFavorite = favorites.includes(discount.id);
+  // d = currently displayed discount (updates on swipe, unlike `discount` which is only the initially loaded one)
+  const d = localDiscount ?? discount!;
+
+  const isExpired = isDiscountExpired(d.id, votes);
+  const isAd = d.isAd === true;
+  const isFavorite = favorites.includes(d.id);
   const discountPercentage =
-    discount.oldPrice > 0 && discount.newPrice > 0
-      ? Math.round(((discount.oldPrice - discount.newPrice) / discount.oldPrice) * 100)
+    d.oldPrice > 0 && d.newPrice > 0
+      ? Math.round(((d.oldPrice - d.newPrice) / d.oldPrice) * 100)
       : 0;
-  const savings = discount.oldPrice > discount.newPrice ? Math.round(discount.oldPrice - discount.newPrice) : 0;
+  const savings = d.oldPrice > d.newPrice ? Math.round(d.oldPrice - d.newPrice) : 0;
   const isHotDeal = discountPercentage >= 30;
   const isLowestPrice = discountPercentage >= 50;
-  const voteData = votes[discount.id] || { active: 0, expired: 0 };
+  const voteData = votes[d.id] || { active: 0, expired: 0 };
   const totalVotes = voteData.active + voteData.expired;
   const activeRatio = totalVotes > 0 ? voteData.active / totalVotes : 0;
   const expiredRatio = totalVotes > 0 ? voteData.expired / totalVotes : 0;
-  const userVoteType = getUserVoteType(discount.id);
+  const userVoteType = getUserVoteType(d.id);
 
   const handleShare = async () => {
-    const shareUrl = discount.link || `https://indiva.app/detay/${discount.id}`;
-    const text = `🔥 İNDİVA'da ${discountPercentage > 0 ? `%${discountPercentage} indirimli ` : ''}fırsat!\n${discount.title}`;
-    try { await Share.share({ message: `${text}\n${shareUrl}`, title: discount.title }); } catch {}
+    const shareUrl = d.link || `https://indiva.app/detay/${d.id}`;
+    const text = `🔥 İNDİVA'da ${discountPercentage > 0 ? `%${discountPercentage} indirimli ` : ''}fırsat!\n${d.title}`;
+    try { await Share.share({ message: `${text}\n${shareUrl}`, title: d.title }); } catch {}
   };
 
   const handleToggleFavorite = async () => {
+    Animated.sequence([
+      Animated.spring(heartScale, { toValue: 1.45, friction: 3, tension: 200, useNativeDriver: true }),
+      Animated.spring(heartScale, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }),
+    ]).start();
     const next = isFavorite
-      ? favorites.filter(f => f !== discount.id)
-      : [...favorites, discount.id];
+      ? favorites.filter(f => f !== d.id)
+      : [...favorites, d.id];
     setFavorites(next);
     await AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(next));
   };
 
   const handleGoToDiscount = () => {
-    if (isAd) { if (discount.link) Linking.openURL(discount.link); return; }
-    if (!isExpired && discount.link) {
-      Linking.openURL(discount.link);
+    if (isAd) { if (d.link) Linking.openURL(d.link); return; }
+    if (!isExpired && d.link) {
+      Linking.openURL(d.link);
       // Show interstitial after visiting deal
       if (interstitial.loaded) interstitial.show().catch(() => {});
     }
@@ -210,48 +373,40 @@ export default function DetailScreen({ route }: Props) {
 
   const handleVote = async (voteType: 'active' | 'expired') => {
     if (userVoted) return;
-    await addVote(discount.id, voteType);
+    await addVote(d.id, voteType);
     const newVotes = getVotes();
     setVotes(newVotes);
     setUserVoted(true);
-    if (isDiscountExpired(discount.id, newVotes)) {
-      setExpireTimer(discount.id);
+    if (isDiscountExpired(d.id, newVotes)) {
+      setExpireTimer(d.id);
     }
   };
 
   const handleCopyCode = () => {
-    if (!discount.discountCode) return;
-    Clipboard.setString(discount.discountCode);
+    if (!d.discountCode) return;
+    Clipboard.setString(d.discountCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
     <>
-      <ScrollView
-        style={[styles.container, { backgroundColor: bg }]}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
-        showsVerticalScrollIndicator={false}
+      <Animated.View
+        style={[styles.swipeWrapper, { backgroundColor: bg, transform: [{ translateX: slideX }] }]}
+        {...panResponder.panHandlers}
       >
-        {/* Back button + navigation */}
+        {/* Sabit üst bar — scroll edilmez */}
         <View style={[styles.topBar, { paddingTop: insets.top, backgroundColor: bg }]}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={{ color: Colors.orange, fontSize: 16 }}>← Geri</Text>
           </TouchableOpacity>
-          <View style={styles.navButtons}>
-            {hasPrev && (
-              <TouchableOpacity onPress={() => navigateToDiscount('prev')} style={styles.navBtn}>
-                <Text style={{ color: Colors.orange }}>‹ Önceki</Text>
-              </TouchableOpacity>
-            )}
-            {hasNext && (
-              <TouchableOpacity onPress={() => navigateToDiscount('next')} style={styles.navBtn}>
-                <Text style={{ color: Colors.orange }}>Sonraki ›</Text>
-              </TouchableOpacity>
-            )}
-          </View>
         </View>
 
+        <ScrollView
+          style={[styles.container, { backgroundColor: bg }]}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+          showsVerticalScrollIndicator={false}
+        >
         <View style={{ padding: 12, gap: 10 }}>
           {/* Hero image */}
           <TouchableOpacity
@@ -259,21 +414,15 @@ export default function DetailScreen({ route }: Props) {
             onPress={() => setLightboxVisible(true)}
             activeOpacity={0.9}
           >
-            <OptimizedImage
-              src={discount.imageUrl}
-              alt={discount.title}
-              containerStyle={StyleSheet.absoluteFill}
-              resizeMode="cover"
-            />
             {/* Blur bg */}
             <Image
-              source={{ uri: discount.imageUrl }}
+              source={{ uri: d.imageUrl }}
               style={StyleSheet.absoluteFill}
               blurRadius={20}
             />
             <OptimizedImage
-              src={discount.imageUrl}
-              alt={discount.title}
+              src={d.imageUrl}
+              alt={d.title}
               containerStyle={styles.heroInner}
               resizeMode="contain"
             />
@@ -286,14 +435,14 @@ export default function DetailScreen({ route }: Props) {
             )}
             {isAd && (
               <View style={[styles.discountBadge, { backgroundColor: Colors.yellow400 }]}>
-                <Text style={[styles.discountBadgeText, { color: Colors.yellow900 }]}>{discount.adBadge || 'REKLAM'}</Text>
+                <Text style={[styles.discountBadgeText, { color: Colors.yellow900 }]}>{d.adBadge || 'REKLAM'}</Text>
               </View>
             )}
 
             {/* Time badge */}
-            {timeAgoStr(discount.createdAt) && (
+            {timeAgoStr(d.createdAt) && (
               <View style={styles.timeBadgeHero}>
-                <Text style={styles.timeBadgeHeroText}>⏱ {timeAgoStr(discount.createdAt)} yakalandı</Text>
+                <Text style={styles.timeBadgeHeroText}>⏱ {timeAgoStr(d.createdAt)} yakalandı</Text>
               </View>
             )}
 
@@ -313,24 +462,46 @@ export default function DetailScreen({ route }: Props) {
           )}
 
           {/* Title card */}
-          <View style={[styles.card, { backgroundColor: cardBg }]}>
+          <Animated.View style={[
+            styles.card,
+            {
+              backgroundColor: isDark ? '#1e2c3a' : '#f5f8ff',
+              opacity: titleAnim,
+              transform: [{ translateY: titleAnim.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+            },
+          ]}>
             <View style={styles.titleRowTop}>
               <View style={[styles.catBadge, { backgroundColor: isDark ? Colors.orange + '33' : Colors.orange + '22' }]}>
-                <Text style={[styles.catBadgeText, { color: Colors.orange }]}>{discount.category}</Text>
+                <Text style={[styles.catBadgeText, { color: Colors.orange }]}>{d.category}</Text>
               </View>
-              <Text style={[styles.brandText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>{discount.brand}</Text>
+              <Text style={[styles.brandText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>{d.brand}</Text>
             </View>
-            <Text style={[styles.discountTitle, { color: textColor }]}>{discount.title}</Text>
+            <Text style={[styles.discountTitle, { color: textColor }]}>{d.title}</Text>
             {isLowestPrice && !isAd && (
               <View style={styles.lowestPriceBadge}>
                 <Text style={{ color: Colors.white, fontSize: 12, fontWeight: '800' }}>👑 EN UYGUN FİYAT</Text>
               </View>
             )}
-          </View>
+          </Animated.View>
+
+          {/* Banner reklam — başlık ile fiyat kartı arasında */}
+          <BannerAd
+            unitId={BANNER_AD_UNIT_ID}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          />
 
           {/* Price card */}
-          {(discount.newPrice > 0 || discount.oldPrice > 0) && (
-            <View style={[styles.card, styles.priceCard, { backgroundColor: isDark ? '#1a1a2e' : '#fff7f0' }]}>
+          {(d.newPrice > 0 || d.oldPrice > 0) && (
+            <Animated.View style={[
+              styles.card,
+              styles.priceCard,
+              {
+                backgroundColor: isDark ? '#1a1a2e' : '#fff7f0',
+                opacity: priceAnim,
+                transform: [{ translateY: priceAnim.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+              },
+            ]}>
               <View style={styles.priceTopRow}>
                 <Text style={[styles.sadesceLabel, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>SADECE</Text>
                 {discountPercentage > 0 && (
@@ -341,13 +512,13 @@ export default function DetailScreen({ route }: Props) {
               </View>
               <View style={styles.priceRow}>
                 <View style={styles.mainPriceRow}>
-                  <Text style={[styles.mainPrice, { color: Colors.orange }]}>{discount.newPrice}</Text>
+                  <Text style={[styles.mainPrice, { color: Colors.orange }]}>{d.newPrice}</Text>
                   <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
                 </View>
-                {discount.oldPrice > 0 && (
+                {d.oldPrice > 0 && (
                   <View style={styles.oldPriceCol}>
                     <Text style={[styles.oldPrice, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
-                      {discount.oldPrice} TL
+                      {d.oldPrice} TL
                     </Text>
                     {savings > 0 && (
                       <Text style={[styles.savingsText, { color: isDark ? Colors.green400 : Colors.green500 }]}>
@@ -366,7 +537,7 @@ export default function DetailScreen({ route }: Props) {
                   <Text style={{ fontSize: 28 }}>💰</Text>
                 </View>
               )}
-            </View>
+            </Animated.View>
           )}
 
           {/* Favorite + Share */}
@@ -375,7 +546,9 @@ export default function DetailScreen({ route }: Props) {
               onPress={handleToggleFavorite}
               style={[styles.actionBtn, { backgroundColor: cardBg, borderColor: isFavorite ? Colors.red500 : (isDark ? Colors.gray700 : Colors.gray200) }]}
             >
-              <Text style={{ fontSize: 16 }}>{isFavorite ? '❤️' : '🤍'}</Text>
+              <Animated.Text style={{ fontSize: 16, transform: [{ scale: heartScale }] }}>
+                {isFavorite ? '❤️' : '🤍'}
+              </Animated.Text>
               <Text style={[styles.actionBtnText, { color: isFavorite ? Colors.red500 : (isDark ? Colors.gray300 : Colors.gray600) }]}>
                 {isFavorite ? 'Favorilendi' : 'Favorile'}
               </Text>
@@ -390,7 +563,7 @@ export default function DetailScreen({ route }: Props) {
           </View>
 
           {/* Discount code */}
-          {discount.discountCode && (
+          {d.discountCode && (
             <View style={[styles.card, { backgroundColor: cardBg }]}>
               <Text style={{ color: Colors.gray400, fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
                 🎁 Fırsatı yakalamak için kodu kullan
@@ -403,7 +576,7 @@ export default function DetailScreen({ route }: Props) {
                 ]}
               >
                 <Text style={[styles.codeText, { color: copied ? Colors.green500 : Colors.orange }]}>
-                  {copied ? '✓ Kopyalandı!' : discount.discountCode}
+                  {copied ? '✓ Kopyalandı!' : d.discountCode}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -480,6 +653,15 @@ export default function DetailScreen({ route }: Props) {
             <View style={[styles.divLine, { backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }]} />
           </View>
 
+          {/* Native banner reklam alanı */}
+          <View style={styles.mrecWrapper}>
+            <BannerAd
+              unitId={MREC_AD_UNIT_ID}
+              size={BannerAdSize.MEDIUM_RECTANGLE}
+              requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+            />
+          </View>
+
           {/* Similar discounts */}
           {similarDiscounts.length > 0 && (
             <View>
@@ -506,7 +688,53 @@ export default function DetailScreen({ route }: Props) {
             </View>
           )}
         </View>
-      </ScrollView>
+        </ScrollView>
+      </Animated.View>
+
+      {/* Incoming discount overlay — slides in during swipe transition */}
+      {incomingDiscount && (
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: bg, transform: [{ translateX: inSlideX }] },
+          ]}
+          pointerEvents="none"
+        >
+          <View style={{ paddingTop: insets.top + 50, padding: 12, gap: 10 }}>
+            {/* Hero image preview */}
+            <View style={styles.heroContainer}>
+              <Image
+                source={{ uri: incomingDiscount.imageUrl }}
+                style={StyleSheet.absoluteFill}
+                blurRadius={20}
+              />
+              <OptimizedImage
+                src={incomingDiscount.imageUrl}
+                alt={incomingDiscount.title}
+                containerStyle={styles.heroInner}
+                resizeMode="contain"
+              />
+            </View>
+
+            {/* Title preview */}
+            <View style={[styles.card, { backgroundColor: isDark ? '#1e2c3a' : '#f5f8ff' }]}>
+              <Text style={[styles.discountTitle, { color: textColor }]} numberOfLines={2}>
+                {incomingDiscount.title}
+              </Text>
+            </View>
+
+            {/* Price preview */}
+            {incomingDiscount.newPrice > 0 && (
+              <View style={[styles.card, styles.priceCard, { backgroundColor: isDark ? '#1a1a2e' : '#fff7f0' }]}>
+                <View style={styles.mainPriceRow}>
+                  <Text style={[styles.mainPrice, { color: Colors.orange }]}>{incomingDiscount.newPrice}</Text>
+                  <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </Animated.View>
+      )}
 
       {/* Lightbox modal */}
       <Modal visible={lightboxVisible} transparent animationType="fade">
@@ -516,7 +744,7 @@ export default function DetailScreen({ route }: Props) {
           onPress={() => setLightboxVisible(false)}
         >
           <Image
-            source={{ uri: discount.imageUrl }}
+            source={{ uri: d.imageUrl }}
             style={styles.lightboxImage}
             resizeMode="contain"
           />
@@ -555,6 +783,7 @@ function renderVoteBars(activeRatio: number, expiredRatio: number, isDark: boole
 }
 
 const styles = StyleSheet.create({
+  swipeWrapper: { flex: 1, overflow: 'hidden' },
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   topBar: {
@@ -565,8 +794,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   backBtn: { padding: 4 },
-  navButtons: { flexDirection: 'row', gap: 12 },
-  navBtn: { padding: 4 },
   heroContainer: {
     height: 220,
     borderRadius: 20,
@@ -714,6 +941,7 @@ const styles = StyleSheet.create({
   voteBarFill: { height: '100%', borderRadius: 4 },
   voteFooter: { fontSize: 11, textAlign: 'center', lineHeight: 16, marginTop: 8 },
   watermark: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
+  mrecWrapper: { alignItems: 'center', marginVertical: 4 },
   divLine: { flex: 1, height: 1 },
   watermarkText: { fontSize: 10, fontWeight: '900', letterSpacing: 3 },
   similarTitle: { fontSize: 16, fontWeight: '800', marginBottom: 12 },
