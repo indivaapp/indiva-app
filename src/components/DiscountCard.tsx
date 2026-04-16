@@ -68,8 +68,6 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
     return () => clearInterval(interval);
   }, [isServerExpired, discount.deleteAt]);
 
-  if (isHidden) return null;
-
   const discountPercentage = useMemo(
     () =>
       discount.oldPrice > 0 && discount.newPrice > 0
@@ -95,6 +93,8 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
     if (h < 24) return `${h} sa önce`;
     return `${Math.floor(h / 24)} gün önce`;
   }, [discount.createdAt]);
+
+  if (isHidden) return null;
 
   const formatPrice = (price: number) => {
     if (price % 1 === 0) {
