@@ -170,6 +170,19 @@ export default function DetailScreen({ route }: Props) {
     return () => unsubLoaded();
   }, []);
 
+  const pendingLinkRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const unsub = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
+      if (pendingLinkRef.current) {
+        Linking.openURL(pendingLinkRef.current);
+        pendingLinkRef.current = null;
+      }
+      interstitial.load();
+    });
+    return () => unsub();
+  }, []);
+
   useEffect(() => {
     getFavoriteIds().then(setFavorites);
     setVotes(getVotes());
@@ -365,13 +378,17 @@ export default function DetailScreen({ route }: Props) {
   const handleGoToDiscount = async () => {
     if (isAd) { if (d.link) Linking.openURL(d.link); return; }
     if (!isExpired && d.link) {
-      Linking.openURL(d.link);
       const raw = await AsyncStorage.getItem('firsataGitCount');
       const count = parseInt(raw || '0') + 1;
       await AsyncStorage.setItem('firsataGitCount', String(count));
       if (count % 3 === 0 && interstitial.loaded) {
-        interstitial.show().catch(() => {});
-        interstitial.load();
+        pendingLinkRef.current = d.link;
+        interstitial.show().catch(() => {
+          Linking.openURL(d.link);
+          pendingLinkRef.current = null;
+        });
+      } else {
+        Linking.openURL(d.link);
       }
     }
   };
