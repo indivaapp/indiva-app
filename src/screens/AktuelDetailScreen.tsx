@@ -15,11 +15,11 @@ import type { Brochure } from '../types';
 
 const BANNER_AD_UNIT_ID = __DEV__
   ? TestIds.ADAPTIVE_BANNER
-  : 'ca-app-pub-XXXXXXXXXXXXXXXX/AAAAAAAAAAA';
+  : 'ca-app-pub-3675503435035155/8261572668';
 
 const MREC_AD_UNIT_ID = __DEV__
   ? TestIds.ADAPTIVE_BANNER
-  : 'ca-app-pub-XXXXXXXXXXXXXXXX/BBBBBBBBBBB';
+  : 'ca-app-pub-3675503435035155/8261572668';
 
 type ListItem =
   | { type: 'brochure'; data: Brochure; index: number }
@@ -93,7 +93,7 @@ export default function AktuelDetailScreen({ route }: Props) {
   const listData: ListItem[] = [];
   brochures.forEach((item, i) => {
     listData.push({ type: 'brochure', data: item, index: i });
-    if ((i + 1) % 4 === 0 && i < brochures.length - 1) {
+    if ((i + 1) % 2 === 0 && i < brochures.length - 1) {
       listData.push({ type: 'banner', key: `banner_${i}` });
     }
   });
