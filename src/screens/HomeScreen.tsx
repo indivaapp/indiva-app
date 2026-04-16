@@ -32,12 +32,12 @@ type NavProp = NativeStackNavigationProp<RootStackParamList>;
 // Card-slot ad (INLINE_ADAPTIVE_BANNER — fills card width, blends into 2-column grid)
 const CARD_AD_UNIT_ID = __DEV__
   ? TestIds.INLINE_ADAPTIVE_BANNER
-  : 'ca-app-pub-XXXXXXXXXXXXXXXX/CCCCCCCCCCC';
+  : 'ca-app-pub-3675503435035155/8261572668';
 
 // Row banner ad (ANCHORED_ADAPTIVE_BANNER — full-width strip between rows)
 const BANNER_AD_UNIT_ID = __DEV__
   ? TestIds.ADAPTIVE_BANNER
-  : 'ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY';
+  : 'ca-app-pub-3675503435035155/8261572668';
 
 interface HomeScreenProps {
   notificationCount: number;
@@ -276,6 +276,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const headerBg = isDark ? Colors.gray800 : Colors.white;
   const inputBg = isDark ? Colors.gray700 : Colors.gray100;
   const textColor = isDark ? Colors.white : Colors.gray800;
+  const cardBg = isDark ? Colors.gray800 : Colors.white;
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
