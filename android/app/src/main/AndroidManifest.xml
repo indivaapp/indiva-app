@@ -30,7 +30,7 @@
       <!-- Format: ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY -->
       <meta-data
           android:name="com.google.android.gms.ads.APPLICATION_ID"
-          android:value="ca-app-pub-3940256099942544~3347511713"
+          android:value="ca-app-pub-3675503435035155~5154626230"
           tools:replace="android:value"/>
       <!-- NOT: Yukarıdaki Google'ın test App ID'sidir.
            Canlıya geçmeden önce AdMob konsolundan aldığınız gerçek ID ile değiştirin. -->

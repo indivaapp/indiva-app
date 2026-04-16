@@ -1,4 +1,7 @@
 {
   "name": "IndivaNative",
-  "displayName": "İNDİVA"
+  "displayName": "İNDİVA",
+  "react-native-google-mobile-ads": {
+    "android_app_id": "ca-app-pub-3675503435035155~5154626230"
+  }
 }
