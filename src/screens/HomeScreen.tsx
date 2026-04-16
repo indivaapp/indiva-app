@@ -11,7 +11,7 @@ import {
   ScrollView,
   StatusBar,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
@@ -75,11 +75,15 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const allCategories = ['Tümü', ...CATEGORIES];
 
   useEffect(() => {
-    getFavoriteIds().then(setFavorites);
     loadVotesCache().then(() => setVotes(getVotes()));
     loadInitial();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sekme odağa geldiğinde favorileri yenile (FavoritesScreen'deki değişiklikler yansısın)
+  useFocusEffect(useCallback(() => {
+    getFavoriteIds().then(setFavorites);
+  }, []));
 
   const loadInitial = async () => {
     if (isLoadingRef.current) return;

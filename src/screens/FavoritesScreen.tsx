@@ -103,20 +103,22 @@ export default function FavoritesScreen() {
         </View>
       ) : (
         <FlatList
-          data={favoriteDiscounts}
-          keyExtractor={item => item.id}
+          data={favoriteDiscounts.length % 2 !== 0 ? [...favoriteDiscounts, null] : favoriteDiscounts}
+          keyExtractor={item => item ? item.id : '__placeholder__'}
           numColumns={2}
           columnWrapperStyle={styles.row}
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
           renderItem={({ item }) => (
             <View style={styles.cardWrapper}>
-              <DiscountCard
-                discount={item}
-                isFavorite
-                onToggleFavorite={() => handleRemoveFavorite(item.id)}
-                isExpired={isDiscountExpired(item.id, votes)}
-                discountList={favoriteDiscounts}
-              />
+              {item ? (
+                <DiscountCard
+                  discount={item}
+                  isFavorite
+                  onToggleFavorite={() => handleRemoveFavorite(item.id)}
+                  isExpired={isDiscountExpired(item.id, votes)}
+                  discountList={favoriteDiscounts}
+                />
+              ) : null}
             </View>
           )}
         />
