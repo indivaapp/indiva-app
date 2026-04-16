@@ -85,14 +85,31 @@ export default function DetailScreen({ route }: Props) {
   const [expireCountdown, setExpireCountdown] = useState('');
 
   // Animasyon değerleri
-  const slideX    = useRef(new Animated.Value(0)).current;
-  const heartScale = useRef(new Animated.Value(1)).current;
-  const titleAnim  = useRef(new Animated.Value(0)).current;
-  const priceAnim  = useRef(new Animated.Value(0)).current;
+  const slideX      = useRef(new Animated.Value(0)).current;
+  const inSlideX    = useRef(new Animated.Value(0)).current;
+  const heartScale  = useRef(new Animated.Value(1)).current;
+  const titleAnim   = useRef(new Animated.Value(0)).current;
+  const priceAnim   = useRef(new Animated.Value(0)).current;
 
-  const currentIndex = routeList ? routeList.findIndex((d: Discount) => d.id === id) : -1;
+  // Yerel navigasyon state'i — navigation.replace yerine in-place geçiş
+  const [localDiscount, setLocalDiscount] = useState<Discount | null>(routeDiscount ?? null);
+  const [incomingDiscount, setIncomingDiscount] = useState<Discount | null>(null);
+  const [localIndex, setLocalIndex] = useState(
+    routeList ? routeList.findIndex((d: Discount) => d.id === id) : -1
+  );
+
+  const currentIndex = localIndex;
   const hasPrev = currentIndex > 0;
   const hasNext = routeList !== null && routeList !== undefined && currentIndex >= 0 && currentIndex < (routeList?.length ?? 0) - 1;
+
+  // Refs so PanResponder callbacks always see the latest values (avoids stale closures)
+  const localIndexRef = useRef(localIndex);
+  const doSlideRef = useRef<(dir: 'prev' | 'next') => void>(() => {});
+  const setIncomingRef = useRef(setIncomingDiscount);
+  const routeListRef = useRef(routeList);
+  localIndexRef.current = localIndex;
+  setIncomingRef.current = setIncomingDiscount;
+  routeListRef.current = routeList;
 
   const bg = isDark ? Colors.gray900 : Colors.gray100;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
@@ -161,7 +178,7 @@ export default function DetailScreen({ route }: Props) {
       setIsLoading(true);
       getDiscountById(id)
         .then(d => {
-          if (d) setDiscount(d);
+          if (d) { setDiscount(d); setLocalDiscount(d); }
           else setError('İndirim detayı bulunamadı.');
         })
         .catch(() => setError('Yüklenirken hata oluştu.'))
@@ -195,13 +212,46 @@ export default function DetailScreen({ route }: Props) {
     return () => clearInterval(interval);
   }, [id, votes]);
 
-  const navigateToDiscount = useCallback((dir: 'prev' | 'next') => {
+  // navigation.replace yerine in-place geçiş — remount yok, kesintisiz animasyon
+  const doSlide = useCallback((dir: 'prev' | 'next') => {
     if (!routeList) return;
-    const targetIndex = dir === 'prev' ? currentIndex - 1 : currentIndex + 1;
+    const targetIndex = dir === 'next' ? localIndex + 1 : localIndex - 1;
     if (targetIndex < 0 || targetIndex >= routeList.length) return;
     const target = routeList[targetIndex];
-    navigation.replace('Detail', { id: target.id, discount: target, discountList: routeList, direction: dir });
-  }, [routeList, currentIndex, navigation]);
+
+    inSlideX.setValue(dir === 'next' ? SCREEN_W : -SCREEN_W);
+    setIncomingDiscount(target);
+
+    Animated.parallel([
+      Animated.timing(slideX, {
+        toValue: dir === 'next' ? -SCREEN_W : SCREEN_W,
+        duration: 260,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(inSlideX, {
+        toValue: 0,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setLocalDiscount(target);
+      setLocalIndex(targetIndex);
+      setIncomingDiscount(null);
+      slideX.setValue(0);
+      inSlideX.setValue(0);
+      titleAnim.setValue(0);
+      priceAnim.setValue(0);
+      Animated.stagger(110, [
+        Animated.timing(titleAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(priceAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]).start();
+    });
+  }, [routeList, localIndex, slideX, inSlideX, titleAnim, priceAnim]);
+
+  const navigateToDiscount = doSlide;
+  doSlideRef.current = doSlide;
 
   // Yatay kaydırma ile ilanlar arası geçiş
   const panResponder = useRef(
@@ -209,29 +259,45 @@ export default function DetailScreen({ route }: Props) {
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: (_, gs) =>
-        Math.abs(gs.dx) > Math.abs(gs.dy) * 2 && Math.abs(gs.dx) > 14,
+        Math.abs(gs.dx) > Math.abs(gs.dy) * 2 && Math.abs(gs.dx) > 12,
       onMoveShouldSetPanResponderCapture: () => false,
       onPanResponderMove: (_, gs) => {
-        if (gs.dx < 0 && (routeList !== null && routeList !== undefined && currentIndex >= 0 && currentIndex < (routeList?.length ?? 0) - 1)) {
-          slideX.setValue(gs.dx * 0.65);
-        } else if (gs.dx > 0 && currentIndex > 0) {
-          slideX.setValue(gs.dx * 0.65);
+        const idx = localIndexRef.current;
+        const list = routeListRef.current;
+        const hasN = list != null && idx < (list.length - 1);
+        const hasP = idx > 0;
+        if (gs.dx < 0 && hasN) {
+          // Show incoming preview if not already set
+          const nextItem = list![idx + 1];
+          setIncomingRef.current(prev => prev?.id === nextItem.id ? prev : nextItem);
+          slideX.setValue(gs.dx * 0.7);
+          inSlideX.setValue(SCREEN_W + gs.dx * 0.7);
+        } else if (gs.dx > 0 && hasP) {
+          const prevItem = list![idx - 1];
+          setIncomingRef.current(prev => prev?.id === prevItem.id ? prev : prevItem);
+          slideX.setValue(gs.dx * 0.7);
+          inSlideX.setValue(-SCREEN_W + gs.dx * 0.7);
         }
       },
       onPanResponderRelease: (_, gs) => {
-        const threshold = SCREEN_W * 0.28;
-        const hasN = routeList !== null && routeList !== undefined && currentIndex >= 0 && currentIndex < (routeList?.length ?? 0) - 1;
-        const hasP = currentIndex > 0;
-        if ((gs.dx < -threshold || (gs.dx < -50 && gs.vx < -0.4)) && hasN) {
-          Animated.timing(slideX, { toValue: -SCREEN_W, duration: 180, useNativeDriver: true }).start(() => navigateToDiscount('next'));
-        } else if ((gs.dx > threshold || (gs.dx > 50 && gs.vx > 0.4)) && hasP) {
-          Animated.timing(slideX, { toValue: SCREEN_W, duration: 180, useNativeDriver: true }).start(() => navigateToDiscount('prev'));
+        const idx = localIndexRef.current;
+        const list = routeListRef.current;
+        const threshold = SCREEN_W * 0.25;
+        const hasN = list != null && idx < (list.length - 1);
+        const hasP = idx > 0;
+        if ((gs.dx < -threshold || (gs.dx < -40 && gs.vx < -0.5)) && hasN) {
+          doSlideRef.current('next');
+        } else if ((gs.dx > threshold || (gs.dx > 40 && gs.vx > 0.5)) && hasP) {
+          doSlideRef.current('prev');
         } else {
-          Animated.spring(slideX, { toValue: 0, friction: 7, tension: 100, useNativeDriver: true }).start();
+          setIncomingDiscount(null);
+          Animated.spring(slideX, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
+          Animated.spring(inSlideX, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
         }
       },
       onPanResponderTerminate: () => {
-        Animated.spring(slideX, { toValue: 0, friction: 7, tension: 100, useNativeDriver: true }).start();
+        setIncomingDiscount(null);
+        Animated.spring(slideX, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
       },
     })
   ).current;
@@ -251,26 +317,29 @@ export default function DetailScreen({ route }: Props) {
     );
   }
 
-  const isExpired = isDiscountExpired(discount.id, votes);
-  const isAd = discount.isAd === true;
-  const isFavorite = favorites.includes(discount.id);
+  // d = currently displayed discount (updates on swipe, unlike `discount` which is only the initially loaded one)
+  const d = localDiscount ?? discount!;
+
+  const isExpired = isDiscountExpired(d.id, votes);
+  const isAd = d.isAd === true;
+  const isFavorite = favorites.includes(d.id);
   const discountPercentage =
-    discount.oldPrice > 0 && discount.newPrice > 0
-      ? Math.round(((discount.oldPrice - discount.newPrice) / discount.oldPrice) * 100)
+    d.oldPrice > 0 && d.newPrice > 0
+      ? Math.round(((d.oldPrice - d.newPrice) / d.oldPrice) * 100)
       : 0;
-  const savings = discount.oldPrice > discount.newPrice ? Math.round(discount.oldPrice - discount.newPrice) : 0;
+  const savings = d.oldPrice > d.newPrice ? Math.round(d.oldPrice - d.newPrice) : 0;
   const isHotDeal = discountPercentage >= 30;
   const isLowestPrice = discountPercentage >= 50;
-  const voteData = votes[discount.id] || { active: 0, expired: 0 };
+  const voteData = votes[d.id] || { active: 0, expired: 0 };
   const totalVotes = voteData.active + voteData.expired;
   const activeRatio = totalVotes > 0 ? voteData.active / totalVotes : 0;
   const expiredRatio = totalVotes > 0 ? voteData.expired / totalVotes : 0;
-  const userVoteType = getUserVoteType(discount.id);
+  const userVoteType = getUserVoteType(d.id);
 
   const handleShare = async () => {
-    const shareUrl = discount.link || `https://indiva.app/detay/${discount.id}`;
-    const text = `🔥 İNDİVA'da ${discountPercentage > 0 ? `%${discountPercentage} indirimli ` : ''}fırsat!\n${discount.title}`;
-    try { await Share.share({ message: `${text}\n${shareUrl}`, title: discount.title }); } catch {}
+    const shareUrl = d.link || `https://indiva.app/detay/${d.id}`;
+    const text = `🔥 İNDİVA'da ${discountPercentage > 0 ? `%${discountPercentage} indirimli ` : ''}fırsat!\n${d.title}`;
+    try { await Share.share({ message: `${text}\n${shareUrl}`, title: d.title }); } catch {}
   };
 
   const handleToggleFavorite = async () => {
@@ -279,16 +348,16 @@ export default function DetailScreen({ route }: Props) {
       Animated.spring(heartScale, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }),
     ]).start();
     const next = isFavorite
-      ? favorites.filter(f => f !== discount.id)
-      : [...favorites, discount.id];
+      ? favorites.filter(f => f !== d.id)
+      : [...favorites, d.id];
     setFavorites(next);
     await AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(next));
   };
 
   const handleGoToDiscount = () => {
-    if (isAd) { if (discount.link) Linking.openURL(discount.link); return; }
-    if (!isExpired && discount.link) {
-      Linking.openURL(discount.link);
+    if (isAd) { if (d.link) Linking.openURL(d.link); return; }
+    if (!isExpired && d.link) {
+      Linking.openURL(d.link);
       // Show interstitial after visiting deal
       if (interstitial.loaded) interstitial.show().catch(() => {});
     }
@@ -296,18 +365,18 @@ export default function DetailScreen({ route }: Props) {
 
   const handleVote = async (voteType: 'active' | 'expired') => {
     if (userVoted) return;
-    await addVote(discount.id, voteType);
+    await addVote(d.id, voteType);
     const newVotes = getVotes();
     setVotes(newVotes);
     setUserVoted(true);
-    if (isDiscountExpired(discount.id, newVotes)) {
-      setExpireTimer(discount.id);
+    if (isDiscountExpired(d.id, newVotes)) {
+      setExpireTimer(d.id);
     }
   };
 
   const handleCopyCode = () => {
-    if (!discount.discountCode) return;
-    Clipboard.setString(discount.discountCode);
+    if (!d.discountCode) return;
+    Clipboard.setString(d.discountCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -351,13 +420,13 @@ export default function DetailScreen({ route }: Props) {
           >
             {/* Blur bg */}
             <Image
-              source={{ uri: discount.imageUrl }}
+              source={{ uri: d.imageUrl }}
               style={StyleSheet.absoluteFill}
               blurRadius={20}
             />
             <OptimizedImage
-              src={discount.imageUrl}
-              alt={discount.title}
+              src={d.imageUrl}
+              alt={d.title}
               containerStyle={styles.heroInner}
               resizeMode="contain"
             />
@@ -370,14 +439,14 @@ export default function DetailScreen({ route }: Props) {
             )}
             {isAd && (
               <View style={[styles.discountBadge, { backgroundColor: Colors.yellow400 }]}>
-                <Text style={[styles.discountBadgeText, { color: Colors.yellow900 }]}>{discount.adBadge || 'REKLAM'}</Text>
+                <Text style={[styles.discountBadgeText, { color: Colors.yellow900 }]}>{d.adBadge || 'REKLAM'}</Text>
               </View>
             )}
 
             {/* Time badge */}
-            {timeAgoStr(discount.createdAt) && (
+            {timeAgoStr(d.createdAt) && (
               <View style={styles.timeBadgeHero}>
-                <Text style={styles.timeBadgeHeroText}>⏱ {timeAgoStr(discount.createdAt)} yakalandı</Text>
+                <Text style={styles.timeBadgeHeroText}>⏱ {timeAgoStr(d.createdAt)} yakalandı</Text>
               </View>
             )}
 
@@ -407,11 +476,11 @@ export default function DetailScreen({ route }: Props) {
           ]}>
             <View style={styles.titleRowTop}>
               <View style={[styles.catBadge, { backgroundColor: isDark ? Colors.orange + '33' : Colors.orange + '22' }]}>
-                <Text style={[styles.catBadgeText, { color: Colors.orange }]}>{discount.category}</Text>
+                <Text style={[styles.catBadgeText, { color: Colors.orange }]}>{d.category}</Text>
               </View>
-              <Text style={[styles.brandText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>{discount.brand}</Text>
+              <Text style={[styles.brandText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>{d.brand}</Text>
             </View>
-            <Text style={[styles.discountTitle, { color: textColor }]}>{discount.title}</Text>
+            <Text style={[styles.discountTitle, { color: textColor }]}>{d.title}</Text>
             {isLowestPrice && !isAd && (
               <View style={styles.lowestPriceBadge}>
                 <Text style={{ color: Colors.white, fontSize: 12, fontWeight: '800' }}>👑 EN UYGUN FİYAT</Text>
@@ -420,7 +489,7 @@ export default function DetailScreen({ route }: Props) {
           </Animated.View>
 
           {/* Price card */}
-          {(discount.newPrice > 0 || discount.oldPrice > 0) && (
+          {(d.newPrice > 0 || d.oldPrice > 0) && (
             <Animated.View style={[
               styles.card,
               styles.priceCard,
@@ -440,13 +509,13 @@ export default function DetailScreen({ route }: Props) {
               </View>
               <View style={styles.priceRow}>
                 <View style={styles.mainPriceRow}>
-                  <Text style={[styles.mainPrice, { color: Colors.orange }]}>{discount.newPrice}</Text>
+                  <Text style={[styles.mainPrice, { color: Colors.orange }]}>{d.newPrice}</Text>
                   <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
                 </View>
-                {discount.oldPrice > 0 && (
+                {d.oldPrice > 0 && (
                   <View style={styles.oldPriceCol}>
                     <Text style={[styles.oldPrice, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
-                      {discount.oldPrice} TL
+                      {d.oldPrice} TL
                     </Text>
                     {savings > 0 && (
                       <Text style={[styles.savingsText, { color: isDark ? Colors.green400 : Colors.green500 }]}>
@@ -491,7 +560,7 @@ export default function DetailScreen({ route }: Props) {
           </View>
 
           {/* Discount code */}
-          {discount.discountCode && (
+          {d.discountCode && (
             <View style={[styles.card, { backgroundColor: cardBg }]}>
               <Text style={{ color: Colors.gray400, fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
                 🎁 Fırsatı yakalamak için kodu kullan
@@ -504,7 +573,7 @@ export default function DetailScreen({ route }: Props) {
                 ]}
               >
                 <Text style={[styles.codeText, { color: copied ? Colors.green500 : Colors.orange }]}>
-                  {copied ? '✓ Kopyalandı!' : discount.discountCode}
+                  {copied ? '✓ Kopyalandı!' : d.discountCode}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -610,6 +679,51 @@ export default function DetailScreen({ route }: Props) {
         </ScrollView>
       </Animated.View>
 
+      {/* Incoming discount overlay — slides in during swipe transition */}
+      {incomingDiscount && (
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: bg, transform: [{ translateX: inSlideX }] },
+          ]}
+          pointerEvents="none"
+        >
+          <View style={{ paddingTop: insets.top + 50, padding: 12, gap: 10 }}>
+            {/* Hero image preview */}
+            <View style={styles.heroContainer}>
+              <Image
+                source={{ uri: incomingDiscount.imageUrl }}
+                style={StyleSheet.absoluteFill}
+                blurRadius={20}
+              />
+              <OptimizedImage
+                src={incomingDiscount.imageUrl}
+                alt={incomingDiscount.title}
+                containerStyle={styles.heroInner}
+                resizeMode="contain"
+              />
+            </View>
+
+            {/* Title preview */}
+            <View style={[styles.card, { backgroundColor: isDark ? '#1e2c3a' : '#f5f8ff' }]}>
+              <Text style={[styles.discountTitle, { color: textColor }]} numberOfLines={2}>
+                {incomingDiscount.title}
+              </Text>
+            </View>
+
+            {/* Price preview */}
+            {incomingDiscount.newPrice > 0 && (
+              <View style={[styles.card, styles.priceCard, { backgroundColor: isDark ? '#1a1a2e' : '#fff7f0' }]}>
+                <View style={styles.mainPriceRow}>
+                  <Text style={[styles.mainPrice, { color: Colors.orange }]}>{incomingDiscount.newPrice}</Text>
+                  <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </Animated.View>
+      )}
+
       {/* Lightbox modal */}
       <Modal visible={lightboxVisible} transparent animationType="fade">
         <TouchableOpacity
@@ -618,7 +732,7 @@ export default function DetailScreen({ route }: Props) {
           onPress={() => setLightboxVisible(false)}
         >
           <Image
-            source={{ uri: discount.imageUrl }}
+            source={{ uri: d.imageUrl }}
             style={styles.lightboxImage}
             resizeMode="contain"
           />
