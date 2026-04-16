@@ -38,16 +38,16 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>;
 const { width: SCREEN_W } = Dimensions.get('window');
 
 const INTERSTITIAL_AD_UNIT_ID = __DEV__
-  ? TestIds.INTERSTITIAL
-  : 'ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ';
+  ? 'ca-app-pub-3940256099942544/1033173712'
+  : 'ca-app-pub-3675503435035155/8261572668';
 
 const BANNER_AD_UNIT_ID = __DEV__
-  ? TestIds.ADAPTIVE_BANNER
-  : 'ca-app-pub-XXXXXXXXXXXXXXXX/AAAAAAAAAAA';
+  ? 'ca-app-pub-3940256099942544/6300978111'
+  : 'ca-app-pub-3675503435035155/8261572668';
 
 const MREC_AD_UNIT_ID = __DEV__
-  ? TestIds.ADAPTIVE_BANNER
-  : 'ca-app-pub-XXXXXXXXXXXXXXXX/BBBBBBBBBBB';
+  ? 'ca-app-pub-3940256099942544/2247696110'
+  : 'ca-app-pub-3675503435035155/8909740660';
 
 const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
   requestNonPersonalizedAdsOnly: true,
