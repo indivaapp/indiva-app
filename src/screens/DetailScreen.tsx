@@ -657,7 +657,7 @@ export default function DetailScreen({ route }: Props) {
           <View style={styles.mrecWrapper}>
             <BannerAd
               unitId={MREC_AD_UNIT_ID}
-              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+              size={BannerAdSize.MEDIUM_RECTANGLE}
               requestOptions={{ requestNonPersonalizedAdsOnly: true }}
             />
           </View>
