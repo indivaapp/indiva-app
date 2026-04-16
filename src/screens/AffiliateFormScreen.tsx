@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
   Alert, Image,
@@ -12,6 +12,15 @@ import { submitPendingDiscount } from '../services/firebaseService';
 import { CATEGORIES } from '../constants/categories';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
+import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
+
+const INTERSTITIAL_AD_UNIT_ID = __DEV__
+  ? TestIds.INTERSTITIAL
+  : 'ca-app-pub-3675503435035155/8261572668';
+
+const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
+  requestNonPersonalizedAdsOnly: true,
+});
 
 export default function AffiliateFormScreen() {
   const { effectiveTheme } = useTheme();
@@ -30,6 +39,28 @@ export default function AffiliateFormScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
+
+  const submissionResultRef = useRef<'success' | 'error' | null>(null);
+  const adClosedRef = useRef(false);
+  const adShownRef = useRef(false);
+
+  useEffect(() => {
+    const unsub = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
+      interstitial.load();
+      adClosedRef.current = true;
+      if (submissionResultRef.current !== null) {
+        if (submissionResultRef.current === 'success') {
+          setIsSuccess(true);
+        } else {
+          Alert.alert('Hata', 'Gönderim sırasında bir hata oluştu. İnternet bağlantınızı kontrol edin.');
+          setIsSubmitting(false);
+        }
+        submissionResultRef.current = null;
+      }
+    });
+    interstitial.load();
+    return () => unsub();
+  }, []);
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
@@ -70,6 +101,17 @@ export default function AffiliateFormScreen() {
       }
     }
     setIsSubmitting(true);
+    submissionResultRef.current = null;
+    adClosedRef.current = false;
+    adShownRef.current = false;
+
+    if (interstitial.loaded) {
+      adShownRef.current = true;
+      interstitial.show().catch(() => {
+        adShownRef.current = false;
+      });
+    }
+
     try {
       await submitPendingDiscount({
         title: productName,
@@ -80,11 +122,18 @@ export default function AffiliateFormScreen() {
         newPrice: parseFloat(newPrice),
         imageBase64,
       });
-      setIsSuccess(true);
+      if (!adShownRef.current || adClosedRef.current) {
+        setIsSuccess(true);
+      } else {
+        submissionResultRef.current = 'success';
+      }
     } catch {
-      Alert.alert('Hata', 'Gönderim sırasında bir hata oluştu. İnternet bağlantınızı kontrol edin.');
-    } finally {
-      setIsSubmitting(false);
+      if (!adShownRef.current || adClosedRef.current) {
+        Alert.alert('Hata', 'Gönderim sırasında bir hata oluştu. İnternet bağlantınızı kontrol edin.');
+        setIsSubmitting(false);
+      } else {
+        submissionResultRef.current = 'error';
+      }
     }
   };
 
