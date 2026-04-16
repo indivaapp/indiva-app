@@ -14,7 +14,6 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 import { fetchDiscounts, getOfflineCache } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,13 +27,6 @@ import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
-const CARD_AD_UNIT_ID = __DEV__
-  ? 'ca-app-pub-3940256099942544/6300978111'
-  : 'ca-app-pub-3675503435035155/8261572668';
-
-const BANNER_AD_UNIT_ID = __DEV__
-  ? 'ca-app-pub-3940256099942544/6300978111'
-  : 'ca-app-pub-3675503435035155/8261572668';
 
 interface HomeScreenProps {
   notificationCount: number;
@@ -169,66 +161,23 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     });
   }, [discounts, searchTerm, selectedCategory, votes]);
 
-  // Her 6 indirim kartından sonra 1 reklam kartı gelir (grid'de tek slot)
   type HomeRow =
-    | { type: 'pair'; left: Discount; right: Discount | null; pairIndex: number }
-    | { type: 'ad-pair'; right: Discount | null; pairIndex: number };
+    | { type: 'pair'; left: Discount; right: Discount | null; pairIndex: number };
 
   const listItems = useMemo<HomeRow[]>(() => {
     const rows: HomeRow[] = [];
-    let i = 0;
-
-    while (i < filteredDiscounts.length) {
-      // 6 indirim kartı (3 çift)
-      for (let p = 0; p < 3 && i < filteredDiscounts.length; p++) {
-        rows.push({
-          type: 'pair',
-          left: filteredDiscounts[i],
-          right: filteredDiscounts[i + 1] ?? null,
-          pairIndex: i,
-        });
-        i += 2;
-      }
-
-      // Reklam sol slotta, yanında 1 indirim kartı
-      const adRight = filteredDiscounts[i] ?? null;
-      if (adRight) i++;
-      rows.push({ type: 'ad-pair', right: adRight, pairIndex: i });
+    for (let i = 0; i < filteredDiscounts.length; i += 2) {
+      rows.push({
+        type: 'pair',
+        left: filteredDiscounts[i],
+        right: filteredDiscounts[i + 1] ?? null,
+        pairIndex: i,
+      });
     }
-
     return rows;
   }, [filteredDiscounts]);
 
   const renderItem = ({ item }: { item: HomeRow }) => {
-    // Reklam kartı: sol slotta indirim kartıyla aynı boyutta
-    if (item.type === 'ad-pair') {
-      return (
-        <View style={styles.row}>
-          <View style={styles.cardWrapper}>
-            <View style={[styles.adCardSlot, { backgroundColor: cardBg }]}>
-              <BannerAd
-                unitId={CARD_AD_UNIT_ID}
-                size={BannerAdSize.MEDIUM_RECTANGLE}
-                requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-              />
-            </View>
-          </View>
-          <View style={styles.cardWrapper}>
-            {item.right ? (
-              <DiscountCard
-                discount={item.right}
-                isFavorite={favorites.includes(item.right.id)}
-                onToggleFavorite={() => handleToggleFavorite(item.right!.id)}
-                isExpired={isDiscountExpired(item.right.id, votes)}
-                discountList={filteredDiscounts}
-              />
-            ) : (
-              <View />
-            )}
-          </View>
-        </View>
-      );
-    }
 
     // Normal discount pair row
     return (
@@ -513,18 +462,5 @@ const styles = StyleSheet.create({
   allDoneContainer: {
     alignItems: 'center',
     paddingVertical: 32,
-  },
-  adCardSlot: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 250,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 4,
-    elevation: 3,
   },
 });
