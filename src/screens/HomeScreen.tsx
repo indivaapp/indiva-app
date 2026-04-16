@@ -28,15 +28,12 @@ import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
-// In production replace with your real ad unit IDs:
-// Card-slot ad (INLINE_ADAPTIVE_BANNER — fills card width, blends into 2-column grid)
 const CARD_AD_UNIT_ID = __DEV__
-  ? TestIds.INLINE_ADAPTIVE_BANNER
+  ? 'ca-app-pub-3940256099942544/6300978111'
   : 'ca-app-pub-3675503435035155/8261572668';
 
-// Row banner ad (ANCHORED_ADAPTIVE_BANNER — full-width strip between rows)
 const BANNER_AD_UNIT_ID = __DEV__
-  ? TestIds.ADAPTIVE_BANNER
+  ? 'ca-app-pub-3940256099942544/6300978111'
   : 'ca-app-pub-3675503435035155/8261572668';
 
 interface HomeScreenProps {
