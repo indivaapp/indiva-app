@@ -362,12 +362,17 @@ export default function DetailScreen({ route }: Props) {
     await AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(next));
   };
 
-  const handleGoToDiscount = () => {
+  const handleGoToDiscount = async () => {
     if (isAd) { if (d.link) Linking.openURL(d.link); return; }
     if (!isExpired && d.link) {
       Linking.openURL(d.link);
-      // Show interstitial after visiting deal
-      if (interstitial.loaded) interstitial.show().catch(() => {});
+      const raw = await AsyncStorage.getItem('firsataGitCount');
+      const count = parseInt(raw || '0') + 1;
+      await AsyncStorage.setItem('firsataGitCount', String(count));
+      if (count % 3 === 0 && interstitial.loaded) {
+        interstitial.show().catch(() => {});
+        interstitial.load();
+      }
     }
   };
 
