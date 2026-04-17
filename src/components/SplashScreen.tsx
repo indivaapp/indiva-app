@@ -91,11 +91,15 @@ const styles = StyleSheet.create({
     marginTop: -40, // görsel olarak hafif yukarı kaydır
   },
   logoText: {
-    fontSize: 56,
+    fontSize: 62,
     fontWeight: '900',
+    fontStyle: 'italic',
     color: Colors.white,
-    letterSpacing: 10,
+    letterSpacing: 8,
     includeFontPadding: false,
+    textShadowColor: 'rgba(0,0,0,0.18)',
+    textShadowOffset: { width: 2, height: 3 },
+    textShadowRadius: 6,
   },
   shimmer: {
     ...StyleSheet.absoluteFillObject,
