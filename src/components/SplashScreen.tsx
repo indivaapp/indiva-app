@@ -93,13 +93,10 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 62,
     fontWeight: '900',
-    fontStyle: 'italic',
+    fontFamily: 'PlayfairDisplay-VariableFont_wght',
     color: Colors.white,
     letterSpacing: 8,
     includeFontPadding: false,
-    textShadowColor: 'rgba(0,0,0,0.18)',
-    textShadowOffset: { width: 2, height: 3 },
-    textShadowRadius: 6,
   },
   shimmer: {
     ...StyleSheet.absoluteFillObject,

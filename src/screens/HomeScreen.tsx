@@ -439,12 +439,9 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 26,
     fontWeight: '900',
-    fontStyle: 'italic',
+    fontFamily: 'PlayfairDisplay-VariableFont_wght',
     letterSpacing: 2,
     flexShrink: 0,
-    textShadowColor: 'rgba(255,120,0,0.25)',
-    textShadowOffset: { width: 1, height: 2 },
-    textShadowRadius: 4,
   },
   bellBtn: {
     width: 42,
