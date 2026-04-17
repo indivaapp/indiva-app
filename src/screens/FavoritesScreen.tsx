@@ -93,7 +93,7 @@ export default function FavoritesScreen() {
             Henüz favori indiriminiz bulunmuyor.{'\n'}İndirim kartlarındaki kalp ikonuna dokunarak buraya ekleyebilirsiniz.
           </Text>
           <TouchableOpacity
-            onPress={() => navigation.navigate('MainTabs')}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Home' } as any)}
             style={styles.exploreBtn}
           >
             <Text style={styles.exploreBtnText}>İndirimleri Keşfet</Text>

@@ -115,6 +115,43 @@ export default function DetailScreen({ route }: Props) {
   // Animasyon değerleri
   const slideX      = useRef(new Animated.Value(0)).current;
   const inSlideX    = useRef(new Animated.Value(0)).current;
+  const lbZoom      = useRef(new Animated.Value(1)).current;
+  const lbZoomRef   = useRef(1);
+  const lbPinchDist = useRef(0);
+  const lbPinchScale= useRef(1);
+
+  const lbPinchPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (evt) => evt.nativeEvent.touches.length === 2,
+      onPanResponderMove: (evt) => {
+        const t = evt.nativeEvent.touches;
+        if (t.length === 2) {
+          if (lbPinchDist.current === 0) {
+            const dx = t[0].pageX - t[1].pageX;
+            const dy = t[0].pageY - t[1].pageY;
+            lbPinchDist.current = Math.sqrt(dx * dx + dy * dy);
+            lbPinchScale.current = lbZoomRef.current;
+          }
+          const dx = t[0].pageX - t[1].pageX;
+          const dy = t[0].pageY - t[1].pageY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const next = Math.max(1, Math.min(4, lbPinchScale.current * (dist / lbPinchDist.current)));
+          lbZoom.setValue(next);
+          lbZoomRef.current = next;
+        }
+      },
+      onPanResponderRelease: () => {
+        lbPinchDist.current = 0;
+        if (lbZoomRef.current < 1.15) {
+          Animated.spring(lbZoom, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }).start();
+          lbZoomRef.current = 1;
+        }
+      },
+      onPanResponderTerminate: () => { lbPinchDist.current = 0; },
+    })
+  ).current;
   const heartScale  = useRef(new Animated.Value(1)).current;
   const titleAnim   = useRef(new Animated.Value(0)).current;
   const priceAnim   = useRef(new Animated.Value(0)).current;
@@ -844,21 +881,22 @@ export default function DetailScreen({ route }: Props) {
       )}
 
       {/* Lightbox modal */}
-      <Modal visible={lightboxVisible} transparent animationType="fade">
-        <TouchableOpacity
-          style={styles.lightboxOverlay}
-          activeOpacity={1}
-          onPress={() => setLightboxVisible(false)}
-        >
-          <Image
+      <Modal visible={lightboxVisible} transparent animationType="fade"
+        onDismiss={() => { lbZoom.setValue(1); lbZoomRef.current = 1; }}
+      >
+        <View style={styles.lightboxOverlay} {...lbPinchPan.panHandlers}>
+          <Animated.Image
             source={{ uri: d.imageUrl }}
-            style={styles.lightboxImage}
+            style={[styles.lightboxImage, { transform: [{ scale: lbZoom }] }]}
             resizeMode="contain"
           />
-          <TouchableOpacity style={styles.lightboxClose} onPress={() => setLightboxVisible(false)}>
+          <TouchableOpacity
+            style={styles.lightboxClose}
+            onPress={() => { setLightboxVisible(false); lbZoom.setValue(1); lbZoomRef.current = 1; }}
+          >
             <Text style={{ color: Colors.white, fontSize: 18, fontWeight: '700' }}>✕</Text>
           </TouchableOpacity>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </>
   );
