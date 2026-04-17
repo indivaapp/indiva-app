@@ -166,19 +166,12 @@ export async function getDiscountById(id: string): Promise<Discount | null> {
 
 export async function fetchBrochuresByStore(storeName: string): Promise<Brochure[]> {
   const col = collection(db, `circulars/${storeName}/brochures`);
-  const documentSnapshots = await withTimeout(getDocs(col), 10000, 'Broşürler');
-  const brochures = documentSnapshots.docs.map(d => ({
+  const q = query(col, orderBy('createdAt', 'desc'));
+  const documentSnapshots = await withTimeout(getDocs(q), 10000, 'Broşürler');
+  return documentSnapshots.docs.map(d => ({
     id: d.id,
     ...d.data(),
   })) as Brochure[];
-  brochures.sort((a, b) => {
-    try {
-      return (b.createdAt as any).toMillis() - (a.createdAt as any).toMillis();
-    } catch {
-      return 0;
-    }
-  });
-  return brochures;
 }
 
 export async function submitPendingDiscount(
