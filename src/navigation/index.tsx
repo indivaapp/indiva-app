@@ -94,8 +94,8 @@ function MainTabs({ notificationCount }: { notificationCount: number }) {
         options={{
           tabBarLabel: '',
           tabBarIcon: () => (
-            <View style={[styles.kazanButton, { backgroundColor: isDark ? Colors.gray700 : Colors.white }]}>
-              <Text style={{ fontSize: 28, color: Colors.orange, lineHeight: 34 }}>＋</Text>
+            <View style={styles.kazanButton}>
+              <Text style={{ fontSize: 28, color: Colors.black, lineHeight: 34 }}>＋</Text>
             </View>
           ),
         }}
@@ -176,12 +176,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
+    backgroundColor: Colors.orange,
+    shadowColor: Colors.orange,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 6,
   },
 });
