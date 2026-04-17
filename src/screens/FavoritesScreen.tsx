@@ -74,11 +74,6 @@ export default function FavoritesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: isDark ? Colors.gray800 : Colors.white, paddingTop: insets.top }]}>
-        <Text style={[styles.headerTitle, { color: isDark ? Colors.white : Colors.gray800 }]}>❤️ Favorilerim</Text>
-      </View>
-
       {error && (
         <View style={[styles.errorBox, { backgroundColor: isDark ? '#1f0a0a' : Colors.red50 }]}>
           <Text style={{ color: Colors.red500 }}>{error}</Text>
@@ -89,7 +84,7 @@ export default function FavoritesScreen() {
       )}
 
       {favoriteDiscounts.length === 0 && !error ? (
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { paddingTop: insets.top }]}>
           <View style={[styles.emptyIconBox, { backgroundColor: isDark ? Colors.gray800 : Colors.gray100 }]}>
             <Text style={{ fontSize: 40 }}>🤍</Text>
           </View>
@@ -111,7 +106,7 @@ export default function FavoritesScreen() {
           keyExtractor={item => item ? item.id : '__placeholder__'}
           numColumns={2}
           columnWrapperStyle={styles.row}
-          contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
+          contentContainerStyle={[styles.listContainer, { paddingTop: insets.top, paddingBottom: insets.bottom + 80 }]}
           renderItem={({ item }) => (
             <View style={styles.cardWrapper}>
               {item ? (
@@ -134,16 +129,6 @@ export default function FavoritesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  headerTitle: { fontSize: 20, fontWeight: '800', paddingTop: 10 },
   errorBox: {
     margin: 12,
     padding: 14,
