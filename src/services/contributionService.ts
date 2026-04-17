@@ -47,6 +47,21 @@ export const BADGE_TIERS: Badge[] = [
   },
 ];
 
+const SORTED_TIERS = [...BADGE_TIERS].sort((a, b) => a.min - b.min);
+
+const CLAIMED_TIER_KEY = 'claimedBadgeTierMin';
+
+export async function getClaimedTierMin(): Promise<number> {
+  try {
+    const val = await AsyncStorage.getItem(CLAIMED_TIER_KEY);
+    return val !== null ? parseInt(val, 10) : 0;
+  } catch { return 0; }
+}
+
+export async function setClaimedTierMin(min: number): Promise<void> {
+  try { await AsyncStorage.setItem(CLAIMED_TIER_KEY, String(min)); } catch {}
+}
+
 export interface ContributionStats {
   points: number;
   voteCount: number;
@@ -54,6 +69,7 @@ export interface ContributionStats {
   visitCount: number;
   badge: Badge;
   nextTier: Badge | null;
+  pendingRankUp: Badge | null;
   progress: number;
 }
 
@@ -75,17 +91,27 @@ export async function getContributionStats(): Promise<ContributionStats> {
   const visitCount = Math.min(rawVisits, 50);
   const points = voteCount * 10 + favoriteCount * 5 + visitCount * 2;
 
-  const badge =
-    BADGE_TIERS.find(t => points >= t.min) ?? BADGE_TIERS[BADGE_TIERS.length - 1];
+  const claimedMin = await getClaimedTierMin();
+
+  // Displayed badge = claimed tier (what the user has unlocked via ad)
+  const displayedBadge =
+    SORTED_TIERS.slice().reverse().find(t => t.min <= claimedMin) ??
+    SORTED_TIERS[0];
+
+  // Next tier from displayed badge perspective
+  const displayedIndex = SORTED_TIERS.findIndex(t => t.min === displayedBadge.min);
   const nextTier =
-    [...BADGE_TIERS].reverse().find(t => t.min > points) ?? null;
+    displayedIndex < SORTED_TIERS.length - 1 ? SORTED_TIERS[displayedIndex + 1] : null;
+
+  // pendingRankUp: user qualifies for next tier but hasn't claimed it yet
+  const pendingRankUp = nextTier && points >= nextTier.min ? nextTier : null;
 
   const progress = nextTier
     ? Math.min(
-        Math.round(((points - badge.min) / (nextTier.min - badge.min)) * 100),
-        99
+        Math.round(((points - displayedBadge.min) / (nextTier.min - displayedBadge.min)) * 100),
+        pendingRankUp ? 100 : 99
       )
     : 100;
 
-  return { points, voteCount, favoriteCount, visitCount: rawVisits, badge, nextTier, progress };
+  return { points, voteCount, favoriteCount, visitCount: rawVisits, badge: displayedBadge, nextTier, pendingRankUp, progress };
 }
