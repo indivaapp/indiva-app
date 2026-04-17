@@ -1,35 +1,42 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Easing, StatusBar, Dimensions } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, Animated, Easing, StatusBar } from 'react-native';
+import type { LayoutChangeEvent } from 'react-native';
 import { Colors } from '../constants/colors';
 
-const { width: SCREEN_W } = Dimensions.get('window');
-
 export default function SplashScreen() {
-  const shimmerX = useRef(new Animated.Value(-SCREEN_W * 0.6)).current;
+  const clipWidth = useRef(new Animated.Value(0)).current;
+  const [measured, setMeasured] = useState(false);
 
-  useEffect(() => {
+  const handleLayout = (e: LayoutChangeEvent) => {
+    if (measured) return;
+    setMeasured(true);
+    const w = e.nativeEvent.layout.width;
     Animated.sequence([
-      Animated.delay(400),
-      Animated.timing(shimmerX, {
-        toValue: SCREEN_W * 0.8,
-        duration: 750,
+      Animated.delay(350),
+      Animated.timing(clipWidth, {
+        toValue: w,
+        duration: 900,
         easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
     ]).start();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.orange} />
       <View style={styles.logoWrapper}>
-        <Text style={styles.logoText}>İNDİVA</Text>
-        {/* Yansıma şeridi */}
+        {/* Altta soluk yazı */}
+        <Text style={[styles.logoText, { opacity: 0.45 }]} onLayout={handleLayout}>
+          İNDİVA
+        </Text>
+        {/* Üstte parlak yazı — soldan sağa açılır */}
         <Animated.View
           pointerEvents="none"
-          style={[styles.shimmerStrip, { transform: [{ translateX: shimmerX }, { rotate: '15deg' }] }]}
-        />
+          style={[StyleSheet.absoluteFill, { overflow: 'hidden', width: clipWidth }]}
+        >
+          <Text style={styles.logoText}>İNDİVA</Text>
+        </Animated.View>
       </View>
     </View>
   );
@@ -43,12 +50,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
     marginTop: -40,
-    overflow: 'hidden',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
   },
   logoText: {
     fontSize: 62,
@@ -57,12 +59,5 @@ const styles = StyleSheet.create({
     color: Colors.white,
     letterSpacing: 8,
     includeFontPadding: false,
-  },
-  shimmerStrip: {
-    position: 'absolute',
-    top: -30,
-    bottom: -30,
-    width: 36,
-    backgroundColor: 'rgba(255,255,255,0.55)',
   },
 });
