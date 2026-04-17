@@ -642,7 +642,7 @@ export default function DetailScreen({ route }: Props) {
               style={[styles.actionBtn, { backgroundColor: cardBg, borderColor: isDark ? Colors.gray700 : Colors.gray200 }]}
             >
               <Text style={{ fontSize: 16 }}>💬</Text>
-              <Text style={[styles.actionBtnText, { color: isDark ? Colors.gray300 : Colors.gray600 }]}>WhatsApp</Text>
+              <Text style={[styles.actionBtnText, { color: isDark ? Colors.gray300 : Colors.gray600 }]}>WhatsApp'ta Paylaş</Text>
             </TouchableOpacity>
           </View>
 
