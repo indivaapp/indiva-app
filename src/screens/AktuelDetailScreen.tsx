@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, Image,
-  Modal, Dimensions, ActivityIndicator,
+  Modal, Dimensions, ActivityIndicator, Animated, PanResponder, Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -39,6 +39,67 @@ export default function AktuelDetailScreen({ route }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [lightboxIndex, setLightboxIndex] = useState(-1);
+
+  // Lightbox swipe animation
+  const lightboxSlide = useRef(new Animated.Value(0)).current;
+  const lightboxIndexRef = useRef(lightboxIndex);
+  const brochuresRef = useRef(brochures);
+  const thumbListRef = useRef<any>(null);
+  const changeLightboxRef = useRef<(idx: number, dir: 'next' | 'prev') => void>(() => {});
+  lightboxIndexRef.current = lightboxIndex;
+  brochuresRef.current = brochures;
+
+  const changeLightboxIndex = useCallback((newIndex: number, dir: 'next' | 'prev') => {
+    Animated.timing(lightboxSlide, {
+      toValue: dir === 'next' ? -SCREEN_W : SCREEN_W,
+      duration: 240,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      lightboxSlide.setValue(dir === 'next' ? SCREEN_W : -SCREEN_W);
+      setLightboxIndex(newIndex);
+      Animated.spring(lightboxSlide, {
+        toValue: 0,
+        friction: 9,
+        tension: 100,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, [lightboxSlide]);
+
+  changeLightboxRef.current = changeLightboxIndex;
+
+  const lightboxPan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gs) =>
+        Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5 && Math.abs(gs.dx) > 10,
+      onPanResponderMove: (_, gs) => lightboxSlide.setValue(gs.dx * 0.85),
+      onPanResponderRelease: (_, gs) => {
+        const idx = lightboxIndexRef.current;
+        const len = brochuresRef.current.length;
+        const threshold = SCREEN_W * 0.28;
+        if ((gs.dx < -threshold || (gs.dx < -30 && gs.vx < -0.6)) && idx < len - 1) {
+          changeLightboxRef.current(idx + 1, 'next');
+        } else if ((gs.dx > threshold || (gs.dx > 30 && gs.vx > 0.6)) && idx > 0) {
+          changeLightboxRef.current(idx - 1, 'prev');
+        } else {
+          Animated.spring(lightboxSlide, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(lightboxSlide, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
+
+  // Scroll thumbnail strip to active item
+  useEffect(() => {
+    if (lightboxIndex >= 0 && thumbListRef.current) {
+      try {
+        thumbListRef.current.scrollToIndex({ index: lightboxIndex, animated: true, viewPosition: 0.5 });
+      } catch {}
+    }
+  }, [lightboxIndex]);
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
@@ -89,7 +150,6 @@ export default function AktuelDetailScreen({ route }: Props) {
     );
   }
 
-  // Build flat list data: brochures interleaved with banner ads every 4 items + footer
   const listData: ListItem[] = [];
   brochures.forEach((item, i) => {
     listData.push({ type: 'brochure', data: item, index: i });
@@ -134,13 +194,15 @@ export default function AktuelDetailScreen({ route }: Props) {
               </View>
             );
           }
-          // brochure item
           const { data, index } = item;
           return (
             <TouchableOpacity
               style={[styles.brochureCard, { backgroundColor: cardBg }]}
               activeOpacity={0.85}
-              onPress={() => setLightboxIndex(index)}
+              onPress={() => {
+                lightboxSlide.setValue(0);
+                setLightboxIndex(index);
+              }}
             >
               <View style={styles.brochureImageContainer}>
                 <OptimizedImage
@@ -165,27 +227,48 @@ export default function AktuelDetailScreen({ route }: Props) {
         }}
       />
 
-      {/* Lightbox */}
+      {/* Lightbox with swipe */}
       <Modal visible={lightboxIndex >= 0} transparent animationType="fade">
         <View style={styles.lightboxBg}>
           {lightboxIndex >= 0 && (
             <>
-              <Image
-                source={{ uri: brochures[lightboxIndex].imageUrl }}
-                style={styles.lightboxImage}
-                resizeMode="contain"
-              />
+              {/* Swipeable image */}
+              <Animated.View
+                style={[styles.lightboxImageWrap, { transform: [{ translateX: lightboxSlide }] }]}
+                {...lightboxPan.panHandlers}
+              >
+                <Image
+                  source={{ uri: brochures[lightboxIndex].imageUrl }}
+                  style={styles.lightboxImage}
+                  resizeMode="contain"
+                />
+              </Animated.View>
+
+              {/* Swipe hint dots */}
+              <View style={styles.dotRow}>
+                {brochures.map((_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.dot,
+                      { backgroundColor: i === lightboxIndex ? Colors.orange : 'rgba(255,255,255,0.35)' },
+                    ]}
+                  />
+                ))}
+              </View>
+
               {/* Page counter */}
               <View style={styles.pageCounter}>
                 <Text style={styles.pageCounterText}>
                   {lightboxIndex + 1} / {brochures.length}
                 </Text>
               </View>
+
               {/* Nav buttons */}
               {lightboxIndex > 0 && (
                 <TouchableOpacity
                   style={[styles.navBtnLB, styles.navBtnLeft]}
-                  onPress={() => setLightboxIndex(lightboxIndex - 1)}
+                  onPress={() => changeLightboxIndex(lightboxIndex - 1, 'prev')}
                 >
                   <Text style={styles.navBtnText}>‹</Text>
                 </TouchableOpacity>
@@ -193,11 +276,12 @@ export default function AktuelDetailScreen({ route }: Props) {
               {lightboxIndex < brochures.length - 1 && (
                 <TouchableOpacity
                   style={[styles.navBtnLB, styles.navBtnRight]}
-                  onPress={() => setLightboxIndex(lightboxIndex + 1)}
+                  onPress={() => changeLightboxIndex(lightboxIndex + 1, 'next')}
                 >
                   <Text style={styles.navBtnText}>›</Text>
                 </TouchableOpacity>
               )}
+
               {/* Close */}
               <TouchableOpacity
                 style={styles.closeBtnLB}
@@ -205,23 +289,30 @@ export default function AktuelDetailScreen({ route }: Props) {
               >
                 <Text style={{ color: Colors.white, fontSize: 18, fontWeight: '800' }}>✕</Text>
               </TouchableOpacity>
+
               {/* Validity */}
               {brochures[lightboxIndex].validityDate && (
                 <View style={styles.validityBadge}>
                   <Text style={{ color: Colors.white, fontSize: 12 }}>📅 {brochures[lightboxIndex].validityDate}</Text>
                 </View>
               )}
+
               {/* Thumbnails */}
               <View style={styles.thumbBar}>
                 <FlatList
+                  ref={thumbListRef}
                   data={brochures}
                   horizontal
                   keyExtractor={item => item.id}
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}
+                  getItemLayout={(_, index) => ({ length: 52, offset: (52 + 8) * index + 12, index })}
                   renderItem={({ item, index }) => (
                     <TouchableOpacity
-                      onPress={() => setLightboxIndex(index)}
+                      onPress={() => {
+                        const dir = index > lightboxIndex ? 'next' : 'prev';
+                        changeLightboxIndex(index, dir);
+                      }}
                       style={[
                         styles.thumbItem,
                         {
@@ -268,7 +359,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  lightboxImageWrap: {
+    width: SCREEN_W,
+    height: SCREEN_H * 0.7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   lightboxImage: { width: SCREEN_W, height: SCREEN_H * 0.7 },
+  dotRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 12,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
   pageCounter: {
     position: 'absolute',
     top: 60,
