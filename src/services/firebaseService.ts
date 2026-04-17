@@ -16,7 +16,7 @@ import type { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Discount, Brochure, PendingDiscount, AdRequest } from '../types';
 
-const ITEMS_PER_PAGE = 4;
+const ITEMS_PER_PAGE = 12;
 const OFFLINE_CACHE_KEY = 'indiva_offline_discounts';
 const OFFLINE_CACHE_MAX = 24;
 
