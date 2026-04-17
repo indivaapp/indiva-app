@@ -277,14 +277,41 @@ export default function DetailScreen({ route }: Props) {
   }, [currentDiscountIdForView]);
 
   // navigation.replace yerine in-place geçiş — remount yok, kesintisiz animasyon
+  const resetSlideState = useCallback((target?: typeof localDiscount) => {
+    slideX.stopAnimation();
+    inSlideX.stopAnimation();
+    slideX.setValue(0);
+    inSlideX.setValue(0);
+    setIncomingDiscount(null);
+    if (target) {
+      titleAnim.setValue(0);
+      priceAnim.setValue(0);
+      Animated.stagger(110, [
+        Animated.timing(titleAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(priceAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]).start();
+    }
+  }, [slideX, inSlideX, titleAnim, priceAnim]);
+
   const doSlide = useCallback((dir: 'prev' | 'next') => {
     if (!routeList) return;
     const targetIndex = dir === 'next' ? localIndex + 1 : localIndex - 1;
     if (targetIndex < 0 || targetIndex >= routeList.length) return;
     const target = routeList[targetIndex];
 
+    // Önceki animasyonu iptal et
+    slideX.stopAnimation();
+    inSlideX.stopAnimation();
+
     inSlideX.setValue(dir === 'next' ? SCREEN_W : -SCREEN_W);
     setIncomingDiscount(target);
+
+    // Safety: animasyon tamamlanmazsa 800ms sonra zorla sıfırla
+    const safetyTimer = setTimeout(() => {
+      setLocalDiscount(target);
+      setLocalIndex(targetIndex);
+      resetSlideState(target);
+    }, 800);
 
     Animated.parallel([
       Animated.timing(slideX, {
@@ -299,20 +326,13 @@ export default function DetailScreen({ route }: Props) {
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-    ]).start(() => {
+    ]).start(({ finished }) => {
+      clearTimeout(safetyTimer);
       setLocalDiscount(target);
       setLocalIndex(targetIndex);
-      setIncomingDiscount(null);
-      slideX.setValue(0);
-      inSlideX.setValue(0);
-      titleAnim.setValue(0);
-      priceAnim.setValue(0);
-      Animated.stagger(110, [
-        Animated.timing(titleAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(priceAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      ]).start();
+      resetSlideState(target);
     });
-  }, [routeList, localIndex, slideX, inSlideX, titleAnim, priceAnim]);
+  }, [routeList, localIndex, slideX, inSlideX, resetSlideState]);
 
   const navigateToDiscount = doSlide;
   doSlideRef.current = doSlide;
