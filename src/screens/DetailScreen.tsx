@@ -15,6 +15,7 @@ import {
   Animated,
   PanResponder,
   Easing,
+  BackHandler,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -110,6 +111,18 @@ export default function DetailScreen({ route }: Props) {
   const [copied, setCopied] = useState(false);
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [expireCountdown, setExpireCountdown] = useState('');
+
+  useEffect(() => {
+    if (!lightboxVisible) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setLightboxVisible(false);
+      lbZoom.setValue(1);
+      lbZoomRef.current = 1;
+      return true;
+    });
+    return () => sub.remove();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightboxVisible]);
   const [viewCount, setViewCount] = useState<number | null>(null);
 
   // Animasyon değerleri
