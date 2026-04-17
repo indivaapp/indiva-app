@@ -184,11 +184,13 @@ export default function DetailScreen({ route }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discount?.id]);
 
-  // Load interstitial ad
+  // Load interstitial ad — hata olursa 3 saniye sonra tekrar dene
   useEffect(() => {
-    interstitial.load();
-    const unsubLoaded = interstitial.addAdEventListener(AdEventType.LOADED, () => {});
-    return () => unsubLoaded();
+    if (!interstitial.loaded) interstitial.load();
+    const unsubError = interstitial.addAdEventListener(AdEventType.ERROR, () => {
+      setTimeout(() => { try { interstitial.load(); } catch {} }, 3000);
+    });
+    return () => unsubError();
   }, []);
 
   useEffect(() => {
@@ -428,18 +430,25 @@ export default function DetailScreen({ route }: Props) {
       const raw = await AsyncStorage.getItem('firsataGitCount');
       const count = parseInt(raw || '0') + 1;
       await AsyncStorage.setItem('firsataGitCount', String(count));
-      if (count % 3 === 0 && interstitial.loaded) {
+      if (count % 3 === 0) {
         const link = d.link;
-        const unsubClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
-          unsubClosed();
-          Linking.openURL(link);
-          interstitial.load();
-        });
-        interstitial.show().catch(() => {
-          unsubClosed();
-          Linking.openURL(link);
-        });
-      } else {
+        if (interstitial.loaded) {
+          const unsubClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
+            unsubClosed();
+            Linking.openURL(link);
+            interstitial.load();
+          });
+          interstitial.show().catch(() => {
+            unsubClosed();
+            Linking.openURL(link);
+          });
+          return;
+        }
+        // Yüklü değilse bir sonraki 3'lü için sıfırla ve yüklemeyi başlat
+        await AsyncStorage.setItem('firsataGitCount', '0');
+        try { interstitial.load(); } catch {}
+      }
+      {
         Linking.openURL(d.link);
       }
     }
