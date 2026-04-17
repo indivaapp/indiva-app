@@ -1,79 +1,36 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Easing, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing, StatusBar, Dimensions } from 'react-native';
 import { Colors } from '../constants/colors';
 
+const { width: SCREEN_W } = Dimensions.get('window');
+
 export default function SplashScreen() {
-  const textOpacity = useRef(new Animated.Value(0)).current;
-  const textScale  = useRef(new Animated.Value(0.82)).current;
-  const textTranslateY = useRef(new Animated.Value(24)).current;
-  const shimmerOpacity = useRef(new Animated.Value(0)).current;
+  const shimmerX = useRef(new Animated.Value(-SCREEN_W * 0.6)).current;
 
   useEffect(() => {
-    // 1. Metin giriş animasyonu
-    Animated.parallel([
-      Animated.timing(textOpacity, {
-        toValue: 1,
-        duration: 600,
-        easing: Easing.out(Easing.cubic),
+    Animated.sequence([
+      Animated.delay(400),
+      Animated.timing(shimmerX, {
+        toValue: SCREEN_W * 0.8,
+        duration: 750,
+        easing: Easing.inOut(Easing.ease),
         useNativeDriver: true,
       }),
-      Animated.spring(textScale, {
-        toValue: 1,
-        friction: 7,
-        tension: 45,
-        useNativeDriver: true,
-      }),
-      Animated.timing(textTranslateY, {
-        toValue: 0,
-        duration: 600,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      // 2. Metin yerleştikten sonra hafif parlaklık efekti
-      Animated.sequence([
-        Animated.timing(shimmerOpacity, {
-          toValue: 0.35,
-          duration: 350,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(shimmerOpacity, {
-          toValue: 0,
-          duration: 350,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    });
+    ]).start();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.orange} />
-
-      {/* Ana logo metni */}
-      <Animated.View
-        style={[
-          styles.logoWrapper,
-          {
-            opacity: textOpacity,
-            transform: [
-              { scale: textScale },
-              { translateY: textTranslateY },
-            ],
-          },
-        ]}
-      >
+      <View style={styles.logoWrapper}>
         <Text style={styles.logoText}>İNDİVA</Text>
-
-        {/* Parlaklık overlay */}
+        {/* Yansıma şeridi */}
         <Animated.View
           pointerEvents="none"
-          style={[styles.shimmer, { opacity: shimmerOpacity }]}
+          style={[styles.shimmerStrip, { transform: [{ translateX: shimmerX }, { rotate: '15deg' }] }]}
         />
-      </Animated.View>
+      </View>
     </View>
   );
 }
@@ -88,7 +45,10 @@ const styles = StyleSheet.create({
   logoWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -40, // görsel olarak hafif yukarı kaydır
+    marginTop: -40,
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   logoText: {
     fontSize: 62,
@@ -98,9 +58,11 @@ const styles = StyleSheet.create({
     letterSpacing: 8,
     includeFontPadding: false,
   },
-  shimmer: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.white,
-    borderRadius: 4,
+  shimmerStrip: {
+    position: 'absolute',
+    top: -30,
+    bottom: -30,
+    width: 36,
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
 });
