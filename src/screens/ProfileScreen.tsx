@@ -11,6 +11,7 @@ import { useTheme, Theme } from '../context/ThemeContext';
 import {
   getContributionStats, setClaimedTierMin, BADGE_TIERS, ContributionStats, Badge,
 } from '../services/contributionService';
+import { loadVotesCache } from '../services/voteService';
 import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -75,10 +76,13 @@ export default function ProfileScreen() {
   };
 
   useEffect(() => {
-    getContributionStats().then(refreshStats);
     rankInterstitial.load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useFocusEffect(useCallback(() => {
+    loadVotesCache().then(() => getContributionStats().then(refreshStats));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []));
 
   useEffect(() => {
     if (stats?.pendingRankUp) {
