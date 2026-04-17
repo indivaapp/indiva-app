@@ -60,6 +60,25 @@ const getFavoriteIds = async (): Promise<string[]> => {
   } catch { return []; }
 };
 
+function simpleHash(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+function getFakeViewCount(discountId: string, discountPct: number, firstViewedAt: number, localViews: number): number {
+  const hash = simpleHash(discountId);
+  const hash2 = simpleHash(discountId + 'dur');
+  const scale = 0.5 + Math.max(0, Math.min(discountPct, 100)) / 100 * 0.5;
+  const baseTarget = Math.round((200 + (hash % 1801)) * scale);
+  const durationMs = (4 + (hash2 % 5)) * 3600000;
+  const startValue = Math.round(baseTarget * 0.15);
+  const progress = Math.min((Date.now() - firstViewedAt) / durationMs, 1);
+  return Math.floor(startValue + (baseTarget - startValue) * progress) + localViews;
+}
+
 function timeAgoStr(createdAt: any): string {
   if (!createdAt) return '';
   const ms = typeof createdAt.toMillis === 'function'
@@ -91,6 +110,7 @@ export default function DetailScreen({ route }: Props) {
   const [copied, setCopied] = useState(false);
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [expireCountdown, setExpireCountdown] = useState('');
+  const [viewCount, setViewCount] = useState<number | null>(null);
 
   // Animasyon değerleri
   const slideX      = useRef(new Animated.Value(0)).current;
@@ -106,6 +126,7 @@ export default function DetailScreen({ route }: Props) {
     routeList ? routeList.findIndex((d: Discount) => d.id === id) : -1
   );
 
+  const currentDiscountIdForView = localDiscount?.id ?? id;
   const currentIndex = localIndex;
   const hasPrev = currentIndex > 0;
   const hasNext = routeList !== null && routeList !== undefined && currentIndex >= 0 && currentIndex < (routeList?.length ?? 0) - 1;
@@ -219,6 +240,39 @@ export default function DetailScreen({ route }: Props) {
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [id, votes]);
+
+  // Fake view count: deterministic target, grows linearly 4-8 hours from first visit
+  useEffect(() => {
+    const discountId = currentDiscountIdForView;
+    if (!discountId) return;
+    const currentD = localDiscount ?? discount;
+    const pct = currentD && currentD.oldPrice > 0 && currentD.newPrice > 0
+      ? Math.round(((currentD.oldPrice - currentD.newPrice) / currentD.oldPrice) * 100)
+      : 0;
+    let intervalId: ReturnType<typeof setInterval>;
+    const init = async () => {
+      const firstViewKey = `firstViewed_${discountId}`;
+      let firstViewedAt = Date.now();
+      try {
+        const stored = await AsyncStorage.getItem(firstViewKey);
+        if (stored) { firstViewedAt = parseInt(stored, 10); }
+        else { await AsyncStorage.setItem(firstViewKey, String(firstViewedAt)); }
+      } catch {}
+      let localViews = 1;
+      const lvKey = `localViews_${discountId}`;
+      try {
+        const stored = await AsyncStorage.getItem(lvKey);
+        localViews = stored ? parseInt(stored, 10) + 1 : 1;
+        await AsyncStorage.setItem(lvKey, String(localViews));
+      } catch {}
+      const update = () => setViewCount(getFakeViewCount(discountId, pct, firstViewedAt, localViews));
+      update();
+      intervalId = setInterval(update, 30000);
+    };
+    init();
+    return () => clearInterval(intervalId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDiscountIdForView]);
 
   // navigation.replace yerine in-place geçiş — remount yok, kesintisiz animasyon
   const doSlide = useCallback((dir: 'prev' | 'next') => {
@@ -487,6 +541,11 @@ export default function DetailScreen({ route }: Props) {
               <Text style={[styles.brandText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>{d.brand}</Text>
             </View>
             <Text style={[styles.discountTitle, { color: textColor }]}>{d.title}</Text>
+            {viewCount !== null && (
+              <Text style={[styles.viewCountText, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
+                👁 Bugün {viewCount.toLocaleString('tr-TR')} kişi inceledi
+              </Text>
+            )}
             {isLowestPrice && !isAd && (
               <View style={styles.lowestPriceBadge}>
                 <Text style={{ color: Colors.white, fontSize: 12, fontWeight: '800' }}>👑 EN UYGUN FİYAT</Text>
@@ -967,6 +1026,7 @@ const styles = StyleSheet.create({
     width: SCREEN_W,
     height: SCREEN_W * 1.2,
   },
+  viewCountText: { fontSize: 12, fontWeight: '600' },
   lightboxClose: {
     position: 'absolute',
     top: 48,
