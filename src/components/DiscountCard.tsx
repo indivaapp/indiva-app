@@ -183,13 +183,6 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
           <Text style={styles.removedSoon}>sonra kaldırılacak</Text>
         </View>
       )}
-      {isExpired && !isAd && !isServerExpired && (
-        <View style={styles.votedExpiredOverlay}>
-          <View style={styles.expiredBadge}>
-            <Text style={styles.expiredBadgeText}>İNDİRİM TÜKENDİ</Text>
-          </View>
-        </View>
-      )}
 
       {/* Image */}
       <View style={styles.imageContainer}>
@@ -287,13 +280,13 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
         {/* CTA Button */}
         <TouchableOpacity
           onPress={handleGoToDiscount}
-          disabled={(isExpired || isServerExpired) && !isAd}
+          disabled={isServerExpired && !isAd}
           style={[
             styles.ctaButton,
             {
               backgroundColor: isAd
                 ? Colors.yellow400
-                : (isExpired || isServerExpired)
+                : isServerExpired
                 ? isDark ? Colors.gray600 : Colors.gray400
                 : Colors.orange,
             },
@@ -305,7 +298,7 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
               {
                 color: isAd
                   ? Colors.yellow900
-                  : (isExpired || isServerExpired) && isDark
+                  : isServerExpired && isDark
                   ? Colors.gray400
                   : Colors.white,
               },
@@ -313,7 +306,7 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
           >
             {isAd
               ? 'İndirime Git'
-              : isExpired || isServerExpired
+              : isServerExpired
               ? 'İndirim Sona Erdi'
               : 'İndirime Git'}
           </Text>
