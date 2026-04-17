@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -10,9 +10,9 @@ import type { RootStackParamList } from '../navigation';
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
 const stores = [
-  { name: 'BİM', slug: 'bim', color: '#e30613' },
-  { name: 'A101', slug: 'a101', color: '#0057a8' },
-  { name: 'ŞOK', slug: 'sok', color: '#ffcc00' },
+  { slug: 'bim', color: '#e30613', logo: require('../assets/logos/bim.png') },
+  { slug: 'a101', color: '#0057a8', logo: require('../assets/logos/a101.png') },
+  { slug: 'sok', color: '#ffcc00', logo: require('../assets/logos/sok.png') },
 ];
 
 export default function AktuelScreen() {
@@ -32,13 +32,17 @@ export default function AktuelScreen() {
             styles.storeCard,
             {
               backgroundColor: isDark ? Colors.gray800 : Colors.white,
-              borderColor: isDark ? Colors.gray700 : Colors.gray200,
+              borderColor: store.color,
             },
           ]}
           activeOpacity={0.85}
           onPress={() => navigation.navigate('AktuelDetail', { storeName: store.slug })}
         >
-          <Text style={[styles.storeName, { color: store.color }]}>{store.name}</Text>
+          <Image
+            source={store.logo}
+            style={styles.logo}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
       ))}
     </View>
@@ -63,9 +67,8 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
-  storeName: {
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: 2,
+  logo: {
+    width: '60%',
+    height: '65%',
   },
 });
