@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StatusBar, StyleSheet, NativeModules, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StatusBar, StyleSheet, NativeModules, Platform, Animated } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -26,7 +26,8 @@ const { NavigationBar } = NativeModules;
 function AppContent() {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
-  const [showSplash, setShowSplash] = useState(true);
+  const [splashVisible, setSplashVisible] = useState(true);
+  const splashOpacity = useRef(new Animated.Value(1)).current;
   const [notificationCount, setNotificationCount] = useState(0);
 
   // Sync Android system navigation bar color with app theme
@@ -43,7 +44,13 @@ function AppContent() {
     // Load caches, then hide splash
     Promise.all([loadVotesCache(), loadNotificationsCache()]).finally(() => {
       setNotificationCount(getNotificationCount());
-      setTimeout(() => setShowSplash(false), 1400);
+      setTimeout(() => {
+        Animated.timing(splashOpacity, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }).start(() => setSplashVisible(false));
+      }, 1400);
     });
 
     // Push notifications
@@ -69,10 +76,11 @@ function AppContent() {
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={isDark ? Colors.gray900 : Colors.white}
       />
-      {showSplash ? (
-        <SplashScreen />
-      ) : (
-        <RootNavigator notificationCount={notificationCount} />
+      <RootNavigator notificationCount={notificationCount} />
+      {splashVisible && (
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: splashOpacity }]}>
+          <SplashScreen />
+        </Animated.View>
       )}
     </NavigationContainer>
   );
