@@ -439,35 +439,35 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   content: {
-    padding: 10,
+    padding: 12,
     flex: 1,
   },
   tagsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 3,
+    marginBottom: 4,
     flexWrap: 'wrap',
   },
   categoryTag: {
-    fontSize: 9,
+    fontSize: 12,
     fontWeight: '800',
     color: Colors.orange,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   separator: {
-    fontSize: 9,
+    fontSize: 12,
     color: Colors.gray400,
   },
   brandTag: {
-    fontSize: 9,
+    fontSize: 12,
     color: Colors.gray500,
   },
   title: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
-    lineHeight: 18,
-    height: 36,
+    lineHeight: 22,
+    height: 44,
     overflow: 'hidden',
   },
   spacer: { flex: 1 },
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
   },
   oldPriceBox: {
     flex: 1,
-    paddingVertical: 3,
+    paddingVertical: 5,
     paddingHorizontal: 6,
     borderRadius: 8,
     alignItems: 'center',
@@ -487,13 +487,13 @@ const styles = StyleSheet.create({
   },
   oldPrice: {
     color: Colors.gray300,
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '600',
     textDecorationLine: 'line-through',
   },
   newPriceBox: {
     flex: 1,
-    paddingVertical: 3,
+    paddingVertical: 5,
     paddingHorizontal: 6,
     borderRadius: 8,
     backgroundColor: Colors.orange,
@@ -504,18 +504,18 @@ const styles = StyleSheet.create({
   },
   newPrice: {
     color: Colors.white,
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '800',
   },
   singlePriceBox: {
     borderWidth: 1,
     borderRadius: 8,
-    paddingVertical: 4,
+    paddingVertical: 6,
     paddingHorizontal: 8,
     alignItems: 'center',
   },
   singlePrice: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '800',
   },
   adPriceBox: {
@@ -523,18 +523,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fde68a',
     borderRadius: 8,
-    paddingVertical: 4,
+    paddingVertical: 6,
     alignItems: 'center',
   },
   adPriceText: {
     color: Colors.yellow900,
     fontWeight: '800',
-    fontSize: 13,
+    fontSize: 16,
   },
   ctaButton: {
     marginTop: 8,
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 13,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
   },
   ctaText: {
     fontWeight: '800',
-    fontSize: 13,
+    fontSize: 16,
   },
 });
 
