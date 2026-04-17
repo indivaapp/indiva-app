@@ -86,8 +86,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
 
   useFocusEffect(useCallback(() => {
     const onBack = () => { setShowExitModal(true); return true; };
-    BackHandler.addEventListener('hardwareBackPress', onBack);
-    return () => BackHandler.removeEventListener('hardwareBackPress', onBack);
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => sub.remove();
   }, []));
 
   // Sekme odağa geldiğinde favorileri yenile (FavoritesScreen'deki değişiklikler yansısın)
