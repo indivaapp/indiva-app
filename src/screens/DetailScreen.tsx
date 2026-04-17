@@ -170,19 +170,6 @@ export default function DetailScreen({ route }: Props) {
     return () => unsubLoaded();
   }, []);
 
-  const pendingLinkRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const unsub = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
-      if (pendingLinkRef.current) {
-        Linking.openURL(pendingLinkRef.current);
-        pendingLinkRef.current = null;
-      }
-      interstitial.load();
-    });
-    return () => unsub();
-  }, []);
-
   useEffect(() => {
     getFavoriteIds().then(setFavorites);
     setVotes(getVotes());
@@ -382,10 +369,15 @@ export default function DetailScreen({ route }: Props) {
       const count = parseInt(raw || '0') + 1;
       await AsyncStorage.setItem('firsataGitCount', String(count));
       if (count % 3 === 0 && interstitial.loaded) {
-        pendingLinkRef.current = d.link;
+        const link = d.link;
+        const unsubClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
+          unsubClosed();
+          Linking.openURL(link);
+          interstitial.load();
+        });
         interstitial.show().catch(() => {
-          Linking.openURL(d.link);
-          pendingLinkRef.current = null;
+          unsubClosed();
+          Linking.openURL(link);
         });
       } else {
         Linking.openURL(d.link);
