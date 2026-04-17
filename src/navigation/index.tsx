@@ -1,7 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
@@ -144,7 +144,20 @@ export default function RootNavigator({ notificationCount }: Props) {
       <Stack.Screen
         name="AktuelDetail"
         component={AktuelDetailScreen}
-        options={({ route }) => ({ title: (route.params.storeName || '').toUpperCase() })}
+        options={({ route }) => {
+          const logos: Record<string, any> = {
+            bim: require('../assets/logos/bim.png'),
+            a101: require('../assets/logos/a101.png'),
+            sok: require('../assets/logos/sok.png'),
+          };
+          const logo = logos[route.params.storeName];
+          return {
+            headerTitle: () => logo
+              ? <Image source={logo} style={{ width: 90, height: 36 }} resizeMode="contain" />
+              : null,
+            headerTitleAlign: 'center',
+          };
+        }}
       />
       <Stack.Screen name="ProfileHelp" component={ProfileHelpScreen} options={{ title: 'Yardım & Destek' }} />
       <Stack.Screen name="ProfilePrivacy" component={ProfilePrivacyScreen} options={{ title: 'Gizlilik Politikası' }} />
