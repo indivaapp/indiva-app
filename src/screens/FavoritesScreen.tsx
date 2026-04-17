@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getDiscountById } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, Votes, loadVotesCache } from '../services/voteService';
@@ -21,6 +21,9 @@ export default function FavoritesScreen() {
   const isDark = effectiveTheme === 'dark';
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavProp>();
+
+  const flatListRef = useRef<any>(null);
+  useScrollToTop(flatListRef);
 
   const [favoriteDiscounts, setFavoriteDiscounts] = useState<Discount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -103,6 +106,7 @@ export default function FavoritesScreen() {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={favoriteDiscounts.length % 2 !== 0 ? [...favoriteDiscounts, null] : favoriteDiscounts}
           keyExtractor={item => item ? item.id : '__placeholder__'}
           numColumns={2}

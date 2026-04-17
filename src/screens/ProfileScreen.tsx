@@ -3,7 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated, Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
@@ -51,6 +51,9 @@ export default function ProfileScreen() {
 
   const [stats, setStats] = useState<ContributionStats | null>(null);
   const [congratsBadge, setCongratsBadge] = useState<Badge | null>(null);
+
+  const scrollRef = useRef<any>(null);
+  useScrollToTop(scrollRef);
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const unlockPulse = useRef(new Animated.Value(1)).current;
@@ -125,7 +128,7 @@ export default function ProfileScreen() {
 
   return (
     <>
-      <ScrollView style={[styles.container, { backgroundColor: bg }]} contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}>
+      <ScrollView ref={scrollRef} style={[styles.container, { backgroundColor: bg }]} contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}>
         <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 16, gap: 16 }}>
 
           {/* Welcome card */}
