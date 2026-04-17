@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
   ctaButton: {
     marginTop: 8,
     borderRadius: 10,
-    paddingVertical: 13,
+    paddingVertical: 8,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
