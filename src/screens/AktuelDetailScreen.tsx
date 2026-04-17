@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, Image,
   Modal, Dimensions, ActivityIndicator, Animated, PanResponder, Easing,
+  Platform, NativeModules,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 import { fetchBrochuresByStore } from '../services/firebaseService';
@@ -153,6 +155,19 @@ export default function AktuelDetailScreen({ route }: Props) {
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
 
+  const setNavBarColor = useCallback((color: string, lightIcons: boolean) => {
+    if (Platform.OS !== 'android') return;
+    const { NavigationBar } = NativeModules;
+    if (NavigationBar?.setColor) {
+      NavigationBar.setColor(color, lightIcons);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    setNavBarColor(isDark ? Colors.gray900 : Colors.gray50, !isDark);
+    return () => setNavBarColor(isDark ? Colors.gray900 : Colors.gray50, !isDark);
+  }, [isDark, setNavBarColor]));
+
   useEffect(() => {
     setIsLoading(true);
     setError('');
@@ -277,7 +292,13 @@ export default function AktuelDetailScreen({ route }: Props) {
       />
 
       {/* Lightbox with swipe */}
-      <Modal visible={lightboxIndex >= 0} transparent animationType="fade">
+      <Modal
+        visible={lightboxIndex >= 0}
+        transparent
+        animationType="fade"
+        onShow={() => setNavBarColor('#000000', false)}
+        onDismiss={() => setNavBarColor(isDark ? Colors.gray900 : Colors.gray50, !isDark)}
+      >
         <View style={styles.lightboxBg}>
           {lightboxIndex >= 0 && (
             <>
