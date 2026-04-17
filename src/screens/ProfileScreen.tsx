@@ -15,7 +15,7 @@ import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
-const INTERSTITIAL_ID = __DEV__ ? TestIds.INTERSTITIAL : 'ca-app-pub-3675503435035155/8261572668';
+const INTERSTITIAL_ID = __DEV__ ? TestIds.INTERSTITIAL : 'ca-app-pub-3675503435035155/1880723761';
 const rankInterstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_ID, { requestNonPersonalizedAdsOnly: true });
 
 const CONGRATS_MESSAGES: Record<string, string> = {
