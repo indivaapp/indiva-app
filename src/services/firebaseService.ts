@@ -69,6 +69,7 @@ const isAdExpired = (discount: Discount): boolean => {
 const filterDiscounts = (discounts: Discount[]): Discount[] =>
   discounts.filter(discount => {
     if (isAdExpired(discount)) return false;
+    if (discount.status === 'İndirim Bitti') return false;
     if (discount.deleteAt) {
       const dt = discount.deleteAt as any;
       const deleteAtMs =

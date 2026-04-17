@@ -595,20 +595,37 @@ export default function DetailScreen({ route }: Props) {
           {/* CTA Button */}
           <TouchableOpacity
             onPress={handleGoToDiscount}
+            disabled={isExpired && !isAd}
             style={[
               styles.ctaBtn,
-              { backgroundColor: isAd ? Colors.yellow400 : Colors.orange },
+              {
+                backgroundColor: isAd
+                  ? Colors.yellow400
+                  : isExpired
+                  ? isDark ? Colors.gray700 : Colors.gray300
+                  : Colors.orange,
+              },
             ]}
           >
-            <Text style={[styles.ctaBtnText, { color: isAd ? Colors.yellow900 : Colors.white }]}>
-              {isAd ? '🛒 İndirime Git' : '🛒 FIRSATA GİT →'}
+            <Text style={[styles.ctaBtnText, { color: isAd ? Colors.yellow900 : isExpired ? Colors.gray500 : Colors.white }]}>
+              {isAd ? '🛒 İndirime Git' : isExpired ? '⛔ İndirim Tükendi' : '🛒 FIRSATA GİT →'}
             </Text>
           </TouchableOpacity>
 
           {/* Voting section */}
           {!isAd && (
             <View style={[styles.card, { backgroundColor: cardBg }]}>
-              {!userVoted ? (
+              {isExpired ? (
+                <View style={{ alignItems: 'center', gap: 8 }}>
+                  <Text style={{ color: Colors.red500, fontWeight: '800', fontSize: 14 }}>⚠️ Topluluk bu indirim bitti dedi!</Text>
+                  {expireCountdown && expireCountdown !== '00:00' && (
+                    <Text style={{ color: Colors.gray400, fontSize: 13 }}>
+                      Bu ilan <Text style={{ color: Colors.orange, fontWeight: '700' }}>{expireCountdown}</Text> sonra kaldırılacak
+                    </Text>
+                  )}
+                  {renderVoteBars(activeRatio, expiredRatio, isDark)}
+                </View>
+              ) : !userVoted ? (
                 <View style={{ gap: 10 }}>
                   <Text style={{ color: isDark ? Colors.gray300 : Colors.gray600, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
                     📊 Bu indirim hâlâ devam ediyor mu?
