@@ -13,7 +13,7 @@ import {
   BackHandler,
   Modal,
 } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
@@ -73,6 +73,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [isOffline, setIsOffline] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const isLoadingRef = useRef(false);
+  const flatListRef = useRef<any>(null);
+  useScrollToTop(flatListRef);
 
   const allCategories = ['Tümü', ...CATEGORIES];
 
@@ -348,6 +350,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={listItems}
           keyExtractor={(item, index) =>
             item.type === 'pair' ? `pair_${item.pairIndex}_${index}` : item.key
