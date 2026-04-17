@@ -24,7 +24,7 @@ export default function AktuelScreen() {
   const bg = isDark ? Colors.gray900 : Colors.gray50;
 
   return (
-    <View style={[styles.container, { backgroundColor: bg, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 64 }]}>
+    <View style={[styles.container, { backgroundColor: bg, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 56 }]}>
       {stores.map(store => (
         <TouchableOpacity
           key={store.slug}
@@ -32,7 +32,7 @@ export default function AktuelScreen() {
             styles.storeCard,
             {
               backgroundColor: isDark ? Colors.gray800 : Colors.white,
-              borderColor: store.color,
+              borderColor: isDark ? Colors.gray700 : Colors.gray200,
             },
           ]}
           activeOpacity={0.85}
