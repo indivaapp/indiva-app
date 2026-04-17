@@ -69,6 +69,10 @@ export default function ProfileScreen() {
   const cardBg = isDark ? Colors.gray800 : Colors.white;
   const textColor = isDark ? Colors.white : Colors.gray800;
 
+  const welcomeCardBg  = isDark ? Colors.gray800 : '#eff6ff'; // soft blue
+  const roadmapCardBg  = isDark ? Colors.gray800 : '#f5f3ff'; // soft lavender
+  const themeCardBg    = isDark ? Colors.gray800 : '#f0fdfa'; // soft mint
+
   const refreshStats = (s: ContributionStats) => {
     setStats(s);
     progressAnim.setValue(0);
@@ -139,7 +143,7 @@ export default function ProfileScreen() {
         <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 16, gap: 16 }}>
 
           {/* Welcome card */}
-          <View style={[styles.card, { backgroundColor: cardBg }]}>
+          <View style={[styles.card, { backgroundColor: welcomeCardBg }]}>
             <View style={styles.welcomeRow}>
               <View style={styles.avatarCircle}>
                 <Text style={{ fontSize: 24 }}>🎯</Text>
@@ -217,7 +221,7 @@ export default function ProfileScreen() {
           </View>
 
           {/* Badge road map */}
-          <View style={[styles.card, { backgroundColor: cardBg }]}>
+          <View style={[styles.card, { backgroundColor: roadmapCardBg }]}>
             <Text style={[styles.sectionLabel, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>Rozet Yol Haritası</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
               {[...BADGE_TIERS].reverse().map(tier => {
@@ -262,7 +266,7 @@ export default function ProfileScreen() {
           </View>
 
           {/* Theme picker */}
-          <View style={[styles.card, { backgroundColor: cardBg }]}>
+          <View style={[styles.card, { backgroundColor: themeCardBg }]}>
             <View style={styles.themeHeader}>
               <Text style={{ fontSize: 16 }}>🎨</Text>
               <Text style={[styles.themeHeaderText, { color: textColor }]}>Tema</Text>
