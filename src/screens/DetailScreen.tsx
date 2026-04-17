@@ -140,9 +140,12 @@ export default function DetailScreen({ route }: Props) {
   setIncomingRef.current = setIncomingDiscount;
   routeListRef.current = routeList;
 
-  const bg = isDark ? Colors.gray900 : Colors.gray100;
+  const bg = isDark ? Colors.gray900 : Colors.gray50;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
   const textColor = isDark ? Colors.white : Colors.gray800;
+  const voteCardBg   = isDark ? Colors.gray800 : '#f0fdf4'; // soft green
+  const codeCardBg   = isDark ? Colors.gray800 : '#fffbeb'; // soft amber
+  const actionBtnBg  = isDark ? Colors.gray800 : '#f8faff'; // soft blue-white
 
   // Giriş animasyonu: yön bilgisine göre sağdan/soldan kayar gelir
   useEffect(() => {
@@ -648,7 +651,7 @@ export default function DetailScreen({ route }: Props) {
           <View style={styles.actionRow}>
             <TouchableOpacity
               onPress={handleToggleFavorite}
-              style={[styles.actionBtn, { backgroundColor: cardBg, borderColor: isFavorite ? Colors.red500 : (isDark ? Colors.gray700 : Colors.gray200) }]}
+              style={[styles.actionBtn, { backgroundColor: actionBtnBg, borderColor: isFavorite ? Colors.red500 : (isDark ? Colors.gray700 : Colors.gray200) }]}
             >
               <Animated.Text style={{ fontSize: 16, transform: [{ scale: heartScale }] }}>
                 {isFavorite ? '❤️' : '🤍'}
@@ -659,7 +662,7 @@ export default function DetailScreen({ route }: Props) {
             </TouchableOpacity>
             <TouchableOpacity
               onPress={handleShare}
-              style={[styles.actionBtn, { backgroundColor: cardBg, borderColor: isDark ? Colors.gray700 : Colors.gray200 }]}
+              style={[styles.actionBtn, { backgroundColor: actionBtnBg, borderColor: isDark ? Colors.gray700 : Colors.gray200 }]}
             >
               <Text style={{ fontSize: 16 }}>💬</Text>
               <Text style={[styles.actionBtnText, { color: isDark ? Colors.gray300 : Colors.gray600 }]}>WhatsApp'ta Paylaş</Text>
@@ -668,7 +671,7 @@ export default function DetailScreen({ route }: Props) {
 
           {/* Discount code */}
           {d.discountCode && (
-            <View style={[styles.card, { backgroundColor: cardBg }]}>
+            <View style={[styles.card, { backgroundColor: codeCardBg }]}>
               <Text style={{ color: Colors.gray400, fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
                 🎁 Fırsatı yakalamak için kodu kullan
               </Text>
@@ -708,7 +711,7 @@ export default function DetailScreen({ route }: Props) {
 
           {/* Voting section */}
           {!isAd && (
-            <View style={[styles.card, { backgroundColor: cardBg }]}>
+            <View style={[styles.card, { backgroundColor: voteCardBg }]}>
               {isExpired ? (
                 <View style={{ alignItems: 'center', gap: 8 }}>
                   <Text style={{ color: Colors.red500, fontWeight: '800', fontSize: 14 }}>⚠️ Topluluk bu indirim bitti dedi!</Text>
