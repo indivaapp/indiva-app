@@ -84,7 +84,7 @@ function MainTabs({ notificationCount }: { notificationCount: number }) {
         component={AktuelScreen}
         options={{
           tabBarLabel: 'Aktüel',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>📰</Text>,
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>📋</Text>,
         }}
       />
 
@@ -106,7 +106,7 @@ function MainTabs({ notificationCount }: { notificationCount: number }) {
         component={FavoritesScreen}
         options={{
           tabBarLabel: 'Favoriler',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>♡</Text>,
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>♥</Text>,
         }}
       />
 
