@@ -400,8 +400,14 @@ export default function DetailScreen({ route }: Props) {
 
   const handleShare = async () => {
     const shareUrl = d.link || `https://indiva.app/detay/${d.id}`;
-    const text = `🔥 İNDİVA'da ${discountPercentage > 0 ? `%${discountPercentage} indirimli ` : ''}fırsat!\n${d.title}`;
-    try { await Share.share({ message: `${text}\n${shareUrl}`, title: d.title }); } catch {}
+    const text = `🔥 İNDİVA'da ${discountPercentage > 0 ? `%${discountPercentage} indirimli ` : ''}fırsat!\n${d.title}\n${shareUrl}`;
+    const waUrl = `whatsapp://send?text=${encodeURIComponent(text)}`;
+    const canOpen = await Linking.canOpenURL(waUrl).catch(() => false);
+    if (canOpen) {
+      Linking.openURL(waUrl);
+    } else {
+      try { await Share.share({ message: text, title: d.title }); } catch {}
+    }
   };
 
   const handleToggleFavorite = async () => {
@@ -626,8 +632,8 @@ export default function DetailScreen({ route }: Props) {
               onPress={handleShare}
               style={[styles.actionBtn, { backgroundColor: cardBg, borderColor: isDark ? Colors.gray700 : Colors.gray200 }]}
             >
-              <Text style={{ fontSize: 16 }}>📤</Text>
-              <Text style={[styles.actionBtnText, { color: isDark ? Colors.gray300 : Colors.gray600 }]}>Paylaş</Text>
+              <Text style={{ fontSize: 16 }}>💬</Text>
+              <Text style={[styles.actionBtnText, { color: isDark ? Colors.gray300 : Colors.gray600 }]}>WhatsApp</Text>
             </TouchableOpacity>
           </View>
 
