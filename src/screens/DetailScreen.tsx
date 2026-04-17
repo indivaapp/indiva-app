@@ -410,11 +410,7 @@ export default function DetailScreen({ route }: Props) {
         {...panResponder.panHandlers}
       >
         {/* Sabit üst bar — scroll edilmez */}
-        <View style={[styles.topBar, { paddingTop: insets.top, backgroundColor: bg }]}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Text style={{ color: Colors.orange, fontSize: 16 }}>← Geri</Text>
-          </TouchableOpacity>
-        </View>
+        <View style={[styles.topBar, { paddingTop: insets.top, backgroundColor: bg }]} />
 
         <ScrollView
           style={[styles.container, { backgroundColor: bg }]}
