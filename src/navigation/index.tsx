@@ -140,7 +140,7 @@ export default function RootNavigator({ notificationCount }: Props) {
       </Stack.Screen>
 
       <Stack.Screen name="Detail" component={DetailScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Bildirimler' }} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Bildirimler', headerTitleAlign: 'center' }} />
       <Stack.Screen
         name="AktuelDetail"
         component={AktuelDetailScreen}
