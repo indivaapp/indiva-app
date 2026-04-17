@@ -19,7 +19,7 @@ class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     val isDark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-    window.navigationBarColor = if (isDark) Color.parseColor("#111827") else Color.parseColor("#f9fafb")
+    window.navigationBarColor = if (isDark) Color.parseColor("#111827") else Color.parseColor("#ffffff")
     WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = !isDark
   }
 }
