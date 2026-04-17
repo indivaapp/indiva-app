@@ -229,7 +229,7 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
             style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.92)' }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={{ fontSize: 16 }}>↗️</Text>
+            <Text style={{ fontSize: 16 }}>⤴️</Text>
           </TouchableOpacity>
         </View>
       </View>
