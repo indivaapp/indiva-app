@@ -76,7 +76,16 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const flatListRef = useRef<any>(null);
   useScrollToTop(flatListRef);
 
-  const allCategories = ['Tümü', ...CATEGORIES];
+  const allCategories = useMemo(() => {
+    if (discounts.length === 0) return ['Tümü', ...CATEGORIES];
+    const counts: Record<string, number> = {};
+    for (const d of discounts) {
+      const cat = normalizeCategory(d.category);
+      if (cat) counts[cat] = (counts[cat] ?? 0) + 1;
+    }
+    const sorted = CATEGORIES.slice().sort((a, b) => (counts[b] ?? 0) - (counts[a] ?? 0));
+    return ['Tümü', ...sorted];
+  }, [discounts]);
 
   useEffect(() => {
     loadVotesCache().then(() => setVotes(getVotes()));
