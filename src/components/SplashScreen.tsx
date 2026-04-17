@@ -53,9 +53,6 @@ export default function SplashScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.orange} />
 
-      {/* Üstten hafif karartma katmanı — derinlik hissi */}
-      <View style={styles.topOverlay} pointerEvents="none" />
-
       {/* Ana logo metni */}
       <Animated.View
         style={[
@@ -87,14 +84,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.orange,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  topOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '40%',
-    backgroundColor: 'rgba(0,0,0,0.06)',
   },
   logoWrapper: {
     alignItems: 'center',
