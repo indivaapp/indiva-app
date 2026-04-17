@@ -16,8 +16,10 @@ import {
   PanResponder,
   Easing,
   BackHandler,
+  Platform,
+  NativeModules,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InterstitialAd, BannerAd, BannerAdSize, AdEventType, TestIds } from 'react-native-google-mobile-ads';
@@ -193,6 +195,13 @@ export default function DetailScreen({ route }: Props) {
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
   const textColor = isDark ? Colors.white : Colors.gray800;
+
+  useFocusEffect(useCallback(() => {
+    if (Platform.OS === 'android') {
+      const { NavigationBar } = NativeModules;
+      NavigationBar?.setColor?.(isDark ? Colors.gray900 : Colors.gray50, !isDark);
+    }
+  }, [isDark]));
   const voteCardBg   = isDark ? Colors.gray800 : '#f0fdf4'; // soft green
   const codeCardBg   = isDark ? Colors.gray800 : '#fffbeb'; // soft amber
   const actionBtnBg  = isDark ? Colors.gray800 : '#f8faff'; // soft blue-white
@@ -894,8 +903,15 @@ export default function DetailScreen({ route }: Props) {
       )}
 
       {/* Lightbox modal */}
-      <Modal visible={lightboxVisible} transparent animationType="fade"
-        onDismiss={() => { lbZoom.setValue(1); lbZoomRef.current = 1; }}
+      <Modal
+        visible={lightboxVisible}
+        transparent
+        animationType="fade"
+        onShow={() => { if (Platform.OS === 'android') NativeModules.NavigationBar?.setColor?.('#000000', false); }}
+        onDismiss={() => {
+          lbZoom.setValue(1); lbZoomRef.current = 1;
+          if (Platform.OS === 'android') NativeModules.NavigationBar?.setColor?.(isDark ? Colors.gray900 : Colors.gray50, !isDark);
+        }}
       >
         <View style={styles.lightboxOverlay} {...lbPinchPan.panHandlers}>
           <Animated.Image
