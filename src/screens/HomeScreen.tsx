@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   ScrollView,
   StatusBar,
+  BackHandler,
+  Modal,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -69,6 +71,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [votes, setVotes] = useState<Votes>({});
   const [error, setError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
   const isLoadingRef = useRef(false);
 
   const allCategories = ['Tümü', ...CATEGORIES];
@@ -78,6 +81,12 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     loadInitial();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useFocusEffect(useCallback(() => {
+    const onBack = () => { setShowExitModal(true); return true; };
+    BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => BackHandler.removeEventListener('hardwareBackPress', onBack);
+  }, []));
 
   // Sekme odağa geldiğinde favorileri yenile (FavoritesScreen'deki değişiklikler yansısın)
   useFocusEffect(useCallback(() => {
@@ -372,6 +381,37 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
           }
         />
       )}
+
+      {/* Exit confirmation modal */}
+      <Modal visible={showExitModal} transparent animationType="fade">
+        <View style={styles.exitOverlay}>
+          <View style={[styles.exitCard, { backgroundColor: isDark ? Colors.gray800 : Colors.white }]}>
+            <Text style={{ fontSize: 36, marginBottom: 8 }}>👋</Text>
+            <Text style={[styles.exitTitle, { color: isDark ? Colors.white : Colors.gray900 }]}>
+              Çıkmak istiyor musun?
+            </Text>
+            <Text style={[styles.exitSubtitle, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>
+              Kaçırdığın fırsatlar olabilir!
+            </Text>
+            <View style={styles.exitButtons}>
+              <TouchableOpacity
+                style={[styles.exitBtn, { backgroundColor: isDark ? Colors.gray700 : Colors.gray100 }]}
+                onPress={() => setShowExitModal(false)}
+              >
+                <Text style={[styles.exitBtnText, { color: isDark ? Colors.gray200 : Colors.gray700 }]}>
+                  Hayır, Kal
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.exitBtn, { backgroundColor: Colors.orange }]}
+                onPress={() => BackHandler.exitApp()}
+              >
+                <Text style={[styles.exitBtnText, { color: Colors.white }]}>Çık</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -489,4 +529,29 @@ const styles = StyleSheet.create({
     minHeight: 50,
     marginVertical: 4,
   },
+  exitOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  exitCard: {
+    width: '100%',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  exitTitle: { fontSize: 20, fontWeight: '900', marginBottom: 6 },
+  exitSubtitle: { fontSize: 13, marginBottom: 24 },
+  exitButtons: { flexDirection: 'row', gap: 12, width: '100%' },
+  exitBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center',
+  },
+  exitBtnText: { fontSize: 15, fontWeight: '800' },
 });
