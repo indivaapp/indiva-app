@@ -63,7 +63,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Tümü');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastVisible, setLastVisible] = useState<FirebaseFirestoreTypes.QueryDocumentSnapshot | null>(null);
   const [hasMore, setHasMore] = useState(true);
