@@ -24,7 +24,7 @@ export default function AktuelScreen() {
   const bg = isDark ? Colors.gray900 : Colors.gray50;
 
   return (
-    <View style={[styles.container, { backgroundColor: bg, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 4 }]}>
+    <View style={[styles.container, { backgroundColor: bg, paddingTop: insets.top + 12, paddingBottom: insets.bottom }]}>
       {stores.map(store => (
         <TouchableOpacity
           key={store.slug}
