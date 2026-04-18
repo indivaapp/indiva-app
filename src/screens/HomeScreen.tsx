@@ -16,7 +16,7 @@ import {
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
+import NativeAdCard from '../components/NativeAdCard';
 import { fetchDiscounts, fetchDiscountsByCategory, getOfflineCache } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -30,9 +30,6 @@ import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
-const BANNER_AD_UNIT_ID = __DEV__
-  ? 'ca-app-pub-3940256099942544/6300978111'
-  : 'ca-app-pub-3675503435035155/8261572668';
 
 interface HomeScreenProps {
   notificationCount: number;
@@ -254,15 +251,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     if (!slot) return <View style={styles.cardWrapper} />;
     if (slot.kind === 'ad') {
       return (
-        <View style={[styles.cardWrapper, styles.adSlot, { backgroundColor: cardBg }]}>
-          <View style={styles.sponsoredBadge}>
-            <Text style={styles.sponsoredText}>Sponsorlu</Text>
-          </View>
-          <BannerAd
-            unitId={BANNER_AD_UNIT_ID}
-            size={BannerAdSize.INLINE_ADAPTIVE_BANNER}
-            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-          />
+        <View style={styles.cardWrapper}>
+          <NativeAdCard />
         </View>
       );
     }
@@ -586,21 +576,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 32,
   },
-  adSlot: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  sponsoredBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    zIndex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 5,
-  },
-  sponsoredText: { color: Colors.white, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
   exitOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
