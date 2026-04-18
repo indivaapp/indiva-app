@@ -17,7 +17,7 @@ import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
-import { fetchDiscounts, getOfflineCache } from '../services/firebaseService';
+import { fetchDiscounts, fetchDiscountsByCategory, getOfflineCache } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Discount } from '../types';
@@ -71,6 +71,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [votes, setVotes] = useState<Votes>({});
   const [error, setError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [categoryDiscounts, setCategoryDiscounts] = useState<Discount[]>([]);
+  const [isCategoryLoading, setIsCategoryLoading] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const isLoadingRef = useRef(false);
   const flatListRef = useRef<any>(null);
@@ -103,6 +105,17 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   useFocusEffect(useCallback(() => {
     getFavoriteIds().then(setFavorites);
   }, []));
+
+  useEffect(() => {
+    if (selectedCategory === 'Tümü') {
+      setCategoryDiscounts([]);
+      return;
+    }
+    setIsCategoryLoading(true);
+    fetchDiscountsByCategory(selectedCategory)
+      .then(setCategoryDiscounts)
+      .finally(() => setIsCategoryLoading(false));
+  }, [selectedCategory]);
 
   const loadInitial = async () => {
     if (isLoadingRef.current) return;
@@ -172,18 +185,17 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
 
   const filteredDiscounts = useMemo(() => {
     const lower = searchTerm.toLowerCase();
-    return discounts.filter(item => {
+    const source = selectedCategory === 'Tümü' ? discounts : categoryDiscounts;
+    return source.filter(item => {
       if (isHiddenFromFeed(item.id)) return false;
-      const matchSearch =
-        !lower ||
+      if (!lower) return true;
+      return (
         item.title.toLowerCase().includes(lower) ||
         item.brand.toLowerCase().includes(lower) ||
-        item.category.toLowerCase().includes(lower);
-      const matchCat =
-        selectedCategory === 'Tümü' || normalizeCategory(item.category) === selectedCategory;
-      return matchSearch && matchCat;
+        item.category.toLowerCase().includes(lower)
+      );
     });
-  }, [discounts, searchTerm, selectedCategory, votes]);
+  }, [discounts, categoryDiscounts, searchTerm, selectedCategory, votes]);
 
   type HomeRow =
     | { type: 'pair'; left: Discount; right: Discount | null; pairIndex: number }
@@ -341,7 +353,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       )}
 
       {/* Initial skeleton loader */}
-      {isLoading && discounts.length === 0 && !error && (
+      {(isLoading && discounts.length === 0 || isCategoryLoading) && !error && (
         <View style={styles.skeletonGrid}>
           {[0, 1, 2, 3].map(i => (
             <View key={i} style={[styles.skeletonCard, { backgroundColor: isDark ? Colors.gray800 : Colors.gray200 }]} />
@@ -350,7 +362,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       )}
 
       {/* Discount list */}
-      {filteredDiscounts.length === 0 && !isLoading && !error ? (
+      {filteredDiscounts.length === 0 && !isLoading && !isCategoryLoading && !error ? (
         <View style={styles.emptyContainer}>
           <Text style={{ fontSize: 40, marginBottom: 12 }}>😕</Text>
           <Text style={{ color: isDark ? Colors.gray300 : Colors.gray600, fontSize: 16, fontWeight: '700' }}>
