@@ -812,20 +812,18 @@ export default function DetailScreen({ route }: Props) {
             </View>
           )}
 
+          {/* Banner reklam — İNDİVA watermark üstünde, tam genişlik */}
+          <BannerAd
+            unitId={MREC_AD_UNIT_ID}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          />
+
           {/* INDIVA watermark */}
           <View style={styles.watermark}>
             <View style={[styles.divLine, { backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }]} />
             <Text style={[styles.watermarkText, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>İNDİVA</Text>
             <View style={[styles.divLine, { backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }]} />
-          </View>
-
-          {/* Native banner reklam alanı */}
-          <View style={styles.mrecWrapper}>
-            <BannerAd
-              unitId={MREC_AD_UNIT_ID}
-              size={BannerAdSize.MEDIUM_RECTANGLE}
-              requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-            />
           </View>
 
           {/* Similar discounts */}
@@ -1115,8 +1113,7 @@ const styles = StyleSheet.create({
   voteBarFill: { height: '100%', borderRadius: 4 },
   voteFooter: { fontSize: 11, textAlign: 'center', lineHeight: 16, marginTop: 8 },
   watermark: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 },
-  mrecWrapper: { alignItems: 'center', marginVertical: 4 },
-  divLine: { flex: 1, height: 1 },
+divLine: { flex: 1, height: 1 },
   watermarkText: { fontSize: 10, fontWeight: '900', letterSpacing: 3 },
   similarTitle: { fontSize: 16, fontWeight: '800', marginBottom: 12 },
   similarGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
