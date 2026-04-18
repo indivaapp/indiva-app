@@ -6,7 +6,7 @@ import { useTheme } from '../context/ThemeContext';
 
 const NATIVE_AD_UNIT_ID = __DEV__
   ? TestIds.NATIVE
-  : 'BURAYA_ADMOB_NATIVE_UNIT_ID'; // AdMob'dan alacağın native ad unit ID
+  : 'ca-app-pub-3675503435035155/8909740660';
 
 export default function NativeAdCard() {
   const { effectiveTheme } = useTheme();
