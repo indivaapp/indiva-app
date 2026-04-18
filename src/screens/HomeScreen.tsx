@@ -73,6 +73,9 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [isOffline, setIsOffline] = useState(false);
   const [categoryDiscounts, setCategoryDiscounts] = useState<Discount[]>([]);
   const [isCategoryLoading, setIsCategoryLoading] = useState(false);
+  const [categoryLastVisible, setCategoryLastVisible] = useState<FirebaseFirestoreTypes.QueryDocumentSnapshot | null>(null);
+  const [categoryHasMore, setCategoryHasMore] = useState(false);
+  const [isCategoryLoadingMore, setIsCategoryLoadingMore] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const isLoadingRef = useRef(false);
   const flatListRef = useRef<any>(null);
@@ -109,11 +112,19 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   useEffect(() => {
     if (selectedCategory === 'Tümü') {
       setCategoryDiscounts([]);
+      setCategoryLastVisible(null);
+      setCategoryHasMore(false);
       return;
     }
     setIsCategoryLoading(true);
-    fetchDiscountsByCategory(selectedCategory)
-      .then(setCategoryDiscounts)
+    setCategoryDiscounts([]);
+    setCategoryLastVisible(null);
+    fetchDiscountsByCategory(selectedCategory, null)
+      .then(result => {
+        setCategoryDiscounts(result.discounts);
+        setCategoryLastVisible(result.lastVisible);
+        setCategoryHasMore(result.hasMore);
+      })
       .finally(() => setIsCategoryLoading(false));
   }, [selectedCategory]);
 
@@ -159,6 +170,23 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       isLoadingRef.current = false;
     }
   }, [hasMore, lastVisible, searchTerm, selectedCategory]);
+
+  const loadMoreCategory = useCallback(async () => {
+    if (isLoadingRef.current || !categoryHasMore || isCategoryLoadingMore) return;
+    isLoadingRef.current = true;
+    setIsCategoryLoadingMore(true);
+    try {
+      const result = await fetchDiscountsByCategory(selectedCategory, categoryLastVisible);
+      if (result.discounts.length > 0) {
+        setCategoryDiscounts(prev => [...prev, ...result.discounts]);
+      }
+      setCategoryLastVisible(result.lastVisible);
+      setCategoryHasMore(result.hasMore);
+    } finally {
+      setIsCategoryLoadingMore(false);
+      isLoadingRef.current = false;
+    }
+  }, [categoryHasMore, categoryLastVisible, isCategoryLoadingMore, selectedCategory]);
 
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -378,7 +406,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
           }
           renderItem={renderItem}
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
-          onEndReached={loadMore}
+          onEndReached={selectedCategory === 'Tümü' ? loadMore : loadMoreCategory}
           onEndReachedThreshold={0.5}
           refreshControl={
             <RefreshControl
@@ -389,9 +417,9 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
             />
           }
           ListFooterComponent={
-            isLoading && discounts.length > 0 ? (
+            (isLoading && discounts.length > 0) || isCategoryLoadingMore ? (
               <ActivityIndicator color={Colors.orange} style={{ marginVertical: 20 }} />
-            ) : !hasMore && discounts.length > 0 ? (
+            ) : selectedCategory === 'Tümü' && !hasMore && discounts.length > 0 ? (
               <View style={styles.allDoneContainer}>
                 <Text style={{ fontSize: 36 }}>🎉</Text>
                 <Text style={{ color: isDark ? Colors.gray200 : Colors.gray700, fontWeight: '800', marginTop: 8 }}>
@@ -399,6 +427,16 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
                 </Text>
                 <Text style={{ color: Colors.gray400, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
                   Tüm fırsatları gördünüz.{'\n'}Yeni indirimler için takipte kalın.
+                </Text>
+              </View>
+            ) : selectedCategory !== 'Tümü' && !categoryHasMore && categoryDiscounts.length > 0 ? (
+              <View style={styles.allDoneContainer}>
+                <Text style={{ fontSize: 36 }}>🎉</Text>
+                <Text style={{ color: isDark ? Colors.gray200 : Colors.gray700, fontWeight: '800', marginTop: 8 }}>
+                  Hepsi bu!
+                </Text>
+                <Text style={{ color: Colors.gray400, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
+                  Bu kategorideki tüm fırsatları gördünüz.
                 </Text>
               </View>
             ) : null

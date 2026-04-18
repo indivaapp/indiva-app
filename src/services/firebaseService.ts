@@ -107,26 +107,22 @@ export async function fetchDiscounts(
   return { discounts, lastVisible: newLastVisible, hasMore };
 }
 
-export async function fetchDiscountsByCategory(category: string): Promise<Discount[]> {
+export async function fetchDiscountsByCategory(
+  category: string,
+  lastVisible: FirebaseFirestoreTypes.QueryDocumentSnapshot | null = null
+): Promise<{ discounts: Discount[]; lastVisible: FirebaseFirestoreTypes.QueryDocumentSnapshot | null; hasMore: boolean }> {
   try {
     const col = collection(db, 'discounts');
-    const q = query(col, where('category', '==', category), limit(100));
+    const q = lastVisible
+      ? query(col, where('category', '==', category), orderBy('createdAt', 'desc'), startAfter(lastVisible), limit(12))
+      : query(col, where('category', '==', category), orderBy('createdAt', 'desc'), limit(12));
     const snap = await withTimeout(getDocs(q), 12000, 'Kategori ilanları');
     const raw = snap.docs.map(d => ({ id: d.id, ...d.data() } as Discount));
     const filtered = filterDiscounts(raw);
-    filtered.sort((a, b) => {
-      const ms = (d: Discount) => {
-        const ct = (d as any).createdAt;
-        if (!ct) return 0;
-        if (typeof ct.toMillis === 'function') return ct.toMillis();
-        if (ct.seconds) return ct.seconds * 1000;
-        return 0;
-      };
-      return ms(b) - ms(a);
-    });
-    return filtered;
+    const newLastVisible = snap.docs[snap.docs.length - 1] ?? null;
+    return { discounts: filtered, lastVisible: newLastVisible, hasMore: snap.docs.length === 12 };
   } catch {
-    return [];
+    return { discounts: [], lastVisible: null, hasMore: false };
   }
 }
 
