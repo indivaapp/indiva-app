@@ -225,33 +225,36 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     });
   }, [discounts, categoryDiscounts, searchTerm, selectedCategory, votes]);
 
-  type HomeRow =
-    | { type: 'pair'; left: Discount; right: Discount | null; pairIndex: number }
-    | { type: 'adCard'; key: string };
+  type HomeSlot =
+    | { kind: 'discount'; item: Discount }
+    | { kind: 'ad'; adKey: string };
+
+  type HomeRow = { rowKey: string; left: HomeSlot; right: HomeSlot | null };
 
   const listItems = useMemo<HomeRow[]>(() => {
-    const rows: HomeRow[] = [];
-    let pairCount = 0;
-    for (let i = 0; i < filteredDiscounts.length; i += 2) {
-      rows.push({
-        type: 'pair',
-        left: filteredDiscounts[i],
-        right: filteredDiscounts[i + 1] ?? null,
-        pairIndex: i,
-      });
-      pairCount++;
-      // Her 2 çiftten (4 ilandan) sonra reklam kartı ekle
-      if (pairCount % 2 === 0) {
-        rows.push({ type: 'adCard', key: `ad-${i}` });
+    // Düz slot dizisi: 4 indirim → 1 reklam → 4 indirim → ...
+    const slots: HomeSlot[] = [];
+    let adCount = 0;
+    for (let i = 0; i < filteredDiscounts.length; i++) {
+      slots.push({ kind: 'discount', item: filteredDiscounts[i] });
+      if ((i + 1) % 4 === 0) {
+        adCount++;
+        slots.push({ kind: 'ad', adKey: `ad-${adCount}` });
       }
+    }
+    // İkişerli sıralara böl
+    const rows: HomeRow[] = [];
+    for (let i = 0; i < slots.length; i += 2) {
+      rows.push({ rowKey: `row-${i}`, left: slots[i], right: slots[i + 1] ?? null });
     }
     return rows;
   }, [filteredDiscounts]);
 
-  const renderItem = ({ item }: { item: HomeRow }) => {
-    if (item.type === 'adCard') {
+  const renderSlot = (slot: HomeSlot | null) => {
+    if (!slot) return <View style={styles.cardWrapper} />;
+    if (slot.kind === 'ad') {
       return (
-        <View style={[styles.adCard, { backgroundColor: cardBg }]}>
+        <View style={[styles.cardWrapper, styles.adSlot, { backgroundColor: cardBg }]}>
           <View style={styles.sponsoredBadge}>
             <Text style={styles.sponsoredText}>Sponsorlu</Text>
           </View>
@@ -263,30 +266,25 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         </View>
       );
     }
-
     return (
-      <View style={styles.row}>
-        <View style={styles.cardWrapper}>
-          <DiscountCard
-            discount={item.left}
-            isFavorite={favorites.includes(item.left.id)}
-            onToggleFavorite={() => handleToggleFavorite(item.left.id)}
-            isExpired={isDiscountExpired(item.left.id, votes)}
-            discountList={filteredDiscounts}
-          />
-        </View>
-        <View style={styles.cardWrapper}>
-          {item.right ? (
-            <DiscountCard
-              discount={item.right}
-              isFavorite={favorites.includes(item.right.id)}
-              onToggleFavorite={() => handleToggleFavorite(item.right!.id)}
-              isExpired={isDiscountExpired(item.right.id, votes)}
-              discountList={filteredDiscounts}
-            />
-          ) : (
-            <View style={styles.cardWrapper} />
-          )}
+      <View style={styles.cardWrapper}>
+        <DiscountCard
+          discount={slot.item}
+          isFavorite={favorites.includes(slot.item.id)}
+          onToggleFavorite={() => handleToggleFavorite(slot.item.id)}
+          isExpired={isDiscountExpired(slot.item.id, votes)}
+          discountList={filteredDiscounts}
+        />
+      </View>
+    );
+  };
+
+  const renderItem = ({ item }: { item: HomeRow }) => (
+    <View style={styles.row}>
+      {renderSlot(item.left)}
+      {renderSlot(item.right)}
+    </View>
+  );
         </View>
       </View>
     );
@@ -405,9 +403,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         <FlatList
           ref={flatListRef}
           data={listItems}
-          keyExtractor={(item, index) =>
-            item.type === 'pair' ? `pair_${item.pairIndex}_${index}` : item.key
-          }
+          keyExtractor={(item) => item.rowKey}
           renderItem={renderItem}
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
           onEndReached={selectedCategory === 'Tümü' ? loadMore : loadMoreCategory}
@@ -590,12 +586,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 32,
   },
-  adCard: {
-    marginHorizontal: 8,
-    marginBottom: 8,
-    borderRadius: 16,
+  adSlot: {
+    borderRadius: 12,
     overflow: 'hidden',
-    minHeight: 80,
   },
   sponsoredBadge: {
     position: 'absolute',
