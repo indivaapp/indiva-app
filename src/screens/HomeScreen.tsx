@@ -227,10 +227,11 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
 
   type HomeRow =
     | { type: 'pair'; left: Discount; right: Discount | null; pairIndex: number }
-    | { type: 'banner'; key: string };
+    | { type: 'adCard'; key: string };
 
   const listItems = useMemo<HomeRow[]>(() => {
     const rows: HomeRow[] = [];
+    let pairCount = 0;
     for (let i = 0; i < filteredDiscounts.length; i += 2) {
       rows.push({
         type: 'pair',
@@ -238,22 +239,25 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         right: filteredDiscounts[i + 1] ?? null,
         pairIndex: i,
       });
-      // Her 3 çiftten (6 ilanından) sonra banner ekle
-      const pairIndex = rows.filter(r => r.type === 'pair').length;
-      if (pairIndex % 3 === 0) {
-        rows.push({ type: 'banner', key: `banner-${i}` });
+      pairCount++;
+      // Her 2 çiftten (4 ilandan) sonra reklam kartı ekle
+      if (pairCount % 2 === 0) {
+        rows.push({ type: 'adCard', key: `ad-${i}` });
       }
     }
     return rows;
   }, [filteredDiscounts]);
 
   const renderItem = ({ item }: { item: HomeRow }) => {
-    if (item.type === 'banner') {
+    if (item.type === 'adCard') {
       return (
-        <View style={styles.bannerContainer}>
+        <View style={[styles.adCard, { backgroundColor: cardBg }]}>
+          <View style={styles.sponsoredBadge}>
+            <Text style={styles.sponsoredText}>Sponsorlu</Text>
+          </View>
           <BannerAd
             unitId={BANNER_AD_UNIT_ID}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            size={BannerAdSize.INLINE_ADAPTIVE_BANNER}
             requestOptions={{ requestNonPersonalizedAdsOnly: true }}
           />
         </View>
@@ -586,12 +590,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 32,
   },
-  bannerContainer: {
-    alignItems: 'center',
-    width: '100%',
-    minHeight: 50,
-    marginVertical: 4,
+  adCard: {
+    marginHorizontal: 8,
+    marginBottom: 8,
+    borderRadius: 16,
+    overflow: 'hidden',
+    minHeight: 80,
   },
+  sponsoredBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    zIndex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 5,
+  },
+  sponsoredText: { color: Colors.white, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
   exitOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
