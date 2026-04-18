@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, Image, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Image, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useNativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
@@ -13,42 +13,64 @@ export default function NativeAdCard() {
   const isDark = effectiveTheme === 'dark';
   const cardBg = isDark ? Colors.gray800 : Colors.white;
   const textColor = isDark ? Colors.white : Colors.gray800;
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const { isLoaded, load, nativeAd } = useNativeAd({
     unitId: NATIVE_AD_UNIT_ID,
     requestOptions: { requestNonPersonalizedAdsOnly: true },
+    onAdFailedToLoad: () => setLoadFailed(true),
   });
 
+  // Boş bağımlılık dizisi — sadece mount'ta bir kez yükle
   useEffect(() => {
     load();
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // Yükleme başarısız — placeholder göster (boş alan bırakmak yerine)
+  if (loadFailed) {
+    return <View style={[styles.container, { backgroundColor: cardBg }]} />;
+  }
+
+  // Yükleniyor
   if (!isLoaded || !nativeAd) {
     return (
-      <View style={[styles.container, { backgroundColor: cardBg, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator color={Colors.orange} />
+      <View style={[styles.container, styles.loadingContainer, { backgroundColor: cardBg }]}>
+        <ActivityIndicator color={Colors.orange} size="small" />
       </View>
     );
   }
 
-  const imageUrl = nativeAd.images?.[0]?.url ?? nativeAd.icon?.url;
+  const mainImageUrl = nativeAd.images?.[0]?.url;
+  const iconUrl = nativeAd.icon?.url;
 
   return (
+    // overflow: 'hidden' KULLANMA — AdMob'un AdChoices ikonunu keser (politika ihlali)
     <NativeAdView nativeAd={nativeAd} style={[styles.container, { backgroundColor: cardBg }]}>
-      {/* Sponsorlu etiketi — AdMob politikası gereği zorunlu */}
-      <View style={styles.sponsoredBadge}>
-        <Text style={styles.sponsoredText}>Sponsorlu</Text>
+
+      {/* Zorunlu: "Sponsorlu" etiketi AdMob politikası gereği */}
+      <View style={[styles.sponsoredBadge, { backgroundColor: isDark ? Colors.gray700 : Colors.gray200 }]}>
+        <Text style={[styles.sponsoredText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>
+          Sponsorlu
+        </Text>
       </View>
 
       {/* Ana görsel */}
-      {imageUrl ? (
-        <Image source={{ uri: imageUrl }} style={styles.image} resizeMode="cover" />
+      {mainImageUrl ? (
+        <Image source={{ uri: mainImageUrl }} style={styles.mainImage} resizeMode="cover" />
+      ) : iconUrl ? (
+        <Image source={{ uri: iconUrl }} style={styles.mainImage} resizeMode="cover" />
       ) : null}
 
-      {/* Başlık */}
-      <Text style={[styles.headline, { color: textColor }]} numberOfLines={2}>
-        {nativeAd.headline}
-      </Text>
+      {/* Reklamveren ikonu + başlık yan yana */}
+      <View style={styles.headlineRow}>
+        {iconUrl && mainImageUrl ? (
+          <Image source={{ uri: iconUrl }} style={styles.advertiserIcon} resizeMode="cover" />
+        ) : null}
+        <Text style={[styles.headline, { color: textColor }]} numberOfLines={2}>
+          {nativeAd.headline}
+        </Text>
+      </View>
 
       {/* Açıklama */}
       {nativeAd.body ? (
@@ -59,10 +81,12 @@ export default function NativeAdCard() {
 
       {/* CTA Butonu */}
       {nativeAd.callToAction ? (
-        <View style={[styles.ctaBtn, { marginTop: 'auto' as any }]}>
+        <View style={styles.ctaBtn}>
           <Text style={styles.ctaText} numberOfLines={1}>{nativeAd.callToAction}</Text>
         </View>
       ) : null}
+
+      {/* Not: AdChoices ikonu NativeAdView tarafından otomatik eklenir — kesmemek için overflow:hidden yok */}
     </NativeAdView>
   );
 }
@@ -73,29 +97,40 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     gap: 6,
-    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
   },
+  loadingContainer: {
+    minHeight: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   sponsoredBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(0,0,0,0.45)',
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 4,
   },
-  sponsoredText: { color: Colors.white, fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
-  image: { width: '100%', aspectRatio: 1, borderRadius: 8, backgroundColor: Colors.gray200 },
-  headline: { fontSize: 13, fontWeight: '700', lineHeight: 18 },
+  sponsoredText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
+  mainImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 8,
+    backgroundColor: Colors.gray200,
+  },
+  headlineRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  advertiserIcon: { width: 20, height: 20, borderRadius: 4, flexShrink: 0, marginTop: 1 },
+  headline: { flex: 1, fontSize: 13, fontWeight: '700', lineHeight: 18 },
   body: { fontSize: 11, lineHeight: 15 },
   ctaBtn: {
     backgroundColor: Colors.orange,
     borderRadius: 8,
     paddingVertical: 8,
     alignItems: 'center',
+    marginTop: 4,
   },
   ctaText: { color: Colors.white, fontSize: 12, fontWeight: '800' },
 });
