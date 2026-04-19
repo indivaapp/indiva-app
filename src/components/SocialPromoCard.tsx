@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking, type StyleProp, type ViewStyle } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 
@@ -30,7 +30,7 @@ const ACCOUNTS = [
   },
 ];
 
-export default function SocialPromoCard() {
+export default function SocialPromoCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
 
@@ -41,7 +41,7 @@ export default function SocialPromoCard() {
   const followBtnText = isDark ? Colors.white : Colors.gray800;
 
   return (
-    <View style={[styles.container, { backgroundColor: containerBg }]}>
+    <View style={[styles.container, { backgroundColor: containerBg }, style]}>
       <Text style={[styles.title, { color: titleColor }]}>İNDİVA</Text>
       <Text style={[styles.subtitle, { color: subtitleColor }]}>Sosyal medyada takip et</Text>
 

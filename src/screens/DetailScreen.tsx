@@ -23,6 +23,7 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InterstitialAd, BannerAd, BannerAdSize, AdEventType, TestIds } from 'react-native-google-mobile-ads';
+import NativeAdCard from '../components/NativeAdCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { getDiscountById, fetchSimilarDiscounts } from '../services/firebaseService';
@@ -48,9 +49,6 @@ const BANNER_AD_UNIT_ID = __DEV__
   ? TestIds.ADAPTIVE_BANNER
   : 'ca-app-pub-3675503435035155/8261572668';
 
-const MREC_AD_UNIT_ID = __DEV__
-  ? TestIds.ADAPTIVE_BANNER
-  : 'ca-app-pub-3675503435035155/8261572668';
 
 const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
   requestNonPersonalizedAdsOnly: true,
@@ -812,12 +810,8 @@ export default function DetailScreen({ route }: Props) {
             </View>
           )}
 
-          {/* Banner reklam — İNDİVA watermark üstünde, tam genişlik */}
-          <BannerAd
-            unitId={MREC_AD_UNIT_ID}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-          />
+          {/* Native reklam — İNDİVA watermark üstünde */}
+          <NativeAdCard style={{ alignSelf: 'stretch' }} />
 
           {/* INDIVA watermark */}
           <View style={styles.watermark}>

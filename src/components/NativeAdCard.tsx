@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Image, StyleSheet, ActivityIndicator, type StyleProp, type ViewStyle } from 'react-native';
 import { useNativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
@@ -9,7 +9,7 @@ const NATIVE_AD_UNIT_ID = __DEV__
   ? TestIds.NATIVE
   : 'ca-app-pub-3675503435035155/8909740660';
 
-export default function NativeAdCard() {
+export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
   const cardBg = isDark ? Colors.gray800 : Colors.white;
@@ -28,15 +28,14 @@ export default function NativeAdCard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Yükleme başarısız — sosyal medya kartı göster
   if (loadFailed) {
-    return <SocialPromoCard />;
+    return <SocialPromoCard style={style} />;
   }
 
   // Yükleniyor
   if (!isLoaded || !nativeAd) {
     return (
-      <View style={[styles.container, styles.loadingContainer, { backgroundColor: cardBg }]}>
+      <View style={[styles.container, styles.loadingContainer, { backgroundColor: cardBg }, style]}>
         <ActivityIndicator color={Colors.orange} size="small" />
       </View>
     );
@@ -47,7 +46,7 @@ export default function NativeAdCard() {
 
   return (
     // overflow: 'hidden' KULLANMA — AdMob'un AdChoices ikonunu keser (politika ihlali)
-    <NativeAdView nativeAd={nativeAd} style={[styles.container, { backgroundColor: cardBg }]}>
+    <NativeAdView nativeAd={nativeAd} style={[styles.container, { backgroundColor: cardBg }, style]}>
 
       {/* Zorunlu: "Sponsorlu" etiketi AdMob politikası gereği */}
       <View style={[styles.sponsoredBadge, { backgroundColor: isDark ? Colors.gray700 : Colors.gray200 }]}>
