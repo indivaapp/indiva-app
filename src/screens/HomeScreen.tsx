@@ -18,10 +18,13 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NativeAdCard from '../components/NativeAdCard';
 import { fetchDiscounts, fetchDiscountsByCategory, getOfflineCache } from '../services/firebaseService';
+import { fetchInfluencerPosts, getSeenPostIds } from '../services/influencerService';
 import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Discount } from '../types';
+import type { Discount, InfluencerPost } from '../types';
 import DiscountCard from '../components/DiscountCard';
+import InfluencerStoriesStrip from '../components/InfluencerStoriesStrip';
+import InfluencerMiniCard from '../components/InfluencerMiniCard';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import { CATEGORIES, normalizeCategory } from '../constants/categories';
@@ -74,6 +77,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [categoryHasMore, setCategoryHasMore] = useState(false);
   const [isCategoryLoadingMore, setIsCategoryLoadingMore] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [influencerPosts, setInfluencerPosts] = useState<InfluencerPost[]>([]);
+  const [seenPostIds, setSeenPostIds] = useState<string[]>([]);
   const isLoadingRef = useRef(false);
   const flatListRef = useRef<any>(null);
   useScrollToTop(flatListRef);
@@ -101,9 +106,10 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     return () => sub.remove();
   }, []));
 
-  // Sekme odağa geldiğinde favorileri yenile (FavoritesScreen'deki değişiklikler yansısın)
+  // Sekme odağa geldiğinde favorileri ve görülmüş story ID'lerini yenile
   useFocusEffect(useCallback(() => {
     getFavoriteIds().then(setFavorites);
+    getSeenPostIds().then(setSeenPostIds);
   }, []));
 
   useEffect(() => {
@@ -131,10 +137,16 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await fetchDiscounts(null);
+      const [result, infPosts, seenIds] = await Promise.all([
+        fetchDiscounts(null),
+        fetchInfluencerPosts(),
+        getSeenPostIds(),
+      ]);
       setDiscounts(result.discounts);
       setLastVisible(result.lastVisible);
       setHasMore(result.hasMore);
+      setInfluencerPosts(infPosts);
+      setSeenPostIds(seenIds);
     } catch {
       const cached = await getOfflineCache();
       if (cached.length > 0) {
@@ -224,19 +236,30 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
 
   type HomeSlot =
     | { kind: 'discount'; item: Discount }
-    | { kind: 'ad'; adKey: string };
+    | { kind: 'ad'; adKey: string }
+    | { kind: 'influencer'; item: InfluencerPost };
 
   type HomeRow = { rowKey: string; left: HomeSlot; right: HomeSlot | null };
 
   const listItems = useMemo<HomeRow[]>(() => {
-    // Düz slot dizisi: 4 indirim → 1 reklam → 4 indirim → ...
+    // Düz slot dizisi: 4 indirim → 1 reklam, 6 indirimde bir 1 influencer kartı
     const slots: HomeSlot[] = [];
     let adCount = 0;
+    let infIdx = 0;
+    let discountSinceLastInf = 0;
+
     for (let i = 0; i < filteredDiscounts.length; i++) {
       slots.push({ kind: 'discount', item: filteredDiscounts[i] });
+      discountSinceLastInf++;
+
       if ((i + 1) % 4 === 0) {
         adCount++;
         slots.push({ kind: 'ad', adKey: `ad-${adCount}` });
+      }
+
+      if (discountSinceLastInf === 6 && infIdx < influencerPosts.length) {
+        slots.push({ kind: 'influencer', item: influencerPosts[infIdx++] });
+        discountSinceLastInf = 0;
       }
     }
     // İkişerli sıralara böl
@@ -245,7 +268,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       rows.push({ rowKey: `row-${i}`, left: slots[i], right: slots[i + 1] ?? null });
     }
     return rows;
-  }, [filteredDiscounts]);
+  }, [filteredDiscounts, influencerPosts]);
 
   const renderSlot = (slot: HomeSlot | null) => {
     if (!slot) return <View style={styles.cardWrapper} />;
@@ -253,6 +276,13 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       return (
         <View style={styles.cardWrapper}>
           <NativeAdCard />
+        </View>
+      );
+    }
+    if (slot.kind === 'influencer') {
+      return (
+        <View style={styles.cardWrapper}>
+          <InfluencerMiniCard post={slot.item} />
         </View>
       );
     }
@@ -275,10 +305,6 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       {renderSlot(item.right)}
     </View>
   );
-        </View>
-      </View>
-    );
-  };
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const headerBg = isDark ? Colors.gray800 : Colors.white;
@@ -396,6 +422,15 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
           keyExtractor={(item) => item.rowKey}
           renderItem={renderItem}
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
+          ListHeaderComponent={
+            <InfluencerStoriesStrip
+              posts={influencerPosts}
+              seenIds={seenPostIds}
+              onStoryPress={(index) =>
+                navigation.navigate('InfluencerStories', { posts: influencerPosts, initialIndex: index })
+              }
+            />
+          }
           onEndReached={selectedCategory === 'Tümü' ? loadMore : loadMoreCategory}
           onEndReachedThreshold={0.5}
           refreshControl={

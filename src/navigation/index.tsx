@@ -5,7 +5,7 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
-import type { Discount } from '../types';
+import type { Discount, InfluencerPost } from '../types';
 
 // Screens
 import HomeScreen from '../screens/HomeScreen';
@@ -21,6 +21,7 @@ import ProfileTermsScreen from '../screens/ProfileTermsScreen';
 import KazanScreen from '../screens/KazanScreen';
 import AffiliateFormScreen from '../screens/AffiliateFormScreen';
 import AdvertiseFormScreen from '../screens/AdvertiseFormScreen';
+import InfluencerStoriesScreen from '../screens/InfluencerStoriesScreen';
 
 export type RootStackParamList = {
   MainTabs: undefined;
@@ -32,6 +33,7 @@ export type RootStackParamList = {
   ProfileTerms: undefined;
   AffiliateForm: undefined;
   AdvertiseForm: undefined;
+  InfluencerStories: { posts: InfluencerPost[]; initialIndex: number };
 };
 
 export type TabParamList = {
@@ -164,6 +166,11 @@ export default function RootNavigator({ notificationCount }: Props) {
       <Stack.Screen name="ProfileTerms" component={ProfileTermsScreen} options={{ title: 'Kullanım Şartları' }} />
       <Stack.Screen name="AffiliateForm" component={AffiliateFormScreen} options={{ title: 'İndirim Paylaş' }} />
       <Stack.Screen name="AdvertiseForm" component={AdvertiseFormScreen} options={{ title: 'İşbirliği Başvurusu' }} />
+      <Stack.Screen
+        name="InfluencerStories"
+        component={InfluencerStoriesScreen}
+        options={{ headerShown: false, animation: 'fade' }}
+      />
     </Stack.Navigator>
   );
 }

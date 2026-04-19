@@ -54,6 +54,20 @@ export interface PendingDiscount {
   status: 'pending';
 }
 
+export interface InfluencerPost {
+  id: string;
+  influencerHandle: string;
+  platform: 'instagram' | 'tiktok' | 'youtube';
+  title: string;
+  brand: string;
+  category: string;
+  imageUrl: string;
+  productLink: string;
+  newPrice: number;
+  oldPrice?: number;
+  createdAt?: FirebaseFirestoreTypes.Timestamp;
+}
+
 export interface AdRequest {
   id?: string;
   type: 'product' | 'store';
