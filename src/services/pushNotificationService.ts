@@ -4,6 +4,8 @@ import {
   getToken,
   onMessage,
   onTokenRefresh,
+  onNotificationOpenedApp,
+  getInitialNotification,
   setBackgroundMessageHandler,
   AuthorizationStatus,
 } from '@react-native-firebase/messaging';
@@ -15,9 +17,27 @@ import {
   serverTimestamp,
 } from '@react-native-firebase/firestore';
 import { addNotification } from './notificationService';
+import { navigationRef } from '../navigation/navigationRef';
 
 const messaging = getMessaging();
 const db = getFirestore();
+
+// Uygulama kapalıyken bildirime tıklanırsa navigation hazır olana kadar sakla
+let pendingDiscountId: string | undefined;
+
+function navigateToDiscount(discountId: string | undefined) {
+  if (!discountId) return;
+  if (navigationRef.isReady()) {
+    navigationRef.navigate('Detail', { id: discountId });
+  }
+}
+
+// App.tsx'teki NavigationContainer onReady callback'inde çağrılır
+export function handlePendingNotification() {
+  const id = pendingDiscountId;
+  pendingDiscountId = undefined;
+  navigateToDiscount(id);
+}
 
 export async function setupPushNotifications(): Promise<void> {
   try {
@@ -42,6 +62,18 @@ export async function setupPushNotifications(): Promise<void> {
         updatedAt: serverTimestamp(),
       });
     });
+
+    // Uygulama arka plandayken bildirime tıklanınca
+    onNotificationOpenedApp(messaging, remoteMessage => {
+      const discountId = remoteMessage.data?.discountId as string | undefined;
+      navigateToDiscount(discountId);
+    });
+
+    // Uygulama kapalıyken bildirime tıklanarak açılınca
+    const initial = await getInitialNotification(messaging);
+    if (initial?.data?.discountId) {
+      pendingDiscountId = initial.data.discountId as string;
+    }
   } catch (err) {
     console.warn('Push notification setup failed:', err);
   }
@@ -55,7 +87,6 @@ export function onMessageListener(
     const body = remoteMessage.notification?.body || 'Yeni bir indirim fırsatı var!';
     const discountId = remoteMessage.data?.discountId as string | undefined;
     await addNotification(title, body, discountId);
-    // Callback fired after notification is persisted to cache
     callback(remoteMessage);
   });
   return unsubscribe;

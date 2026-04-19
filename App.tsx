@@ -19,7 +19,9 @@ import {
 import {
   setupPushNotifications,
   onMessageListener,
+  handlePendingNotification,
 } from './src/services/pushNotificationService';
+import { navigationRef } from './src/navigation/navigationRef';
 
 const { NavigationBar } = NativeModules;
 
@@ -71,7 +73,7 @@ function AppContent() {
   }, []);
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef} onReady={handlePendingNotification}>
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={isDark ? Colors.gray900 : Colors.white}
