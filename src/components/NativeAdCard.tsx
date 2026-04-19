@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, StyleSheet, ActivityIndicator, type StyleProp, type ViewStyle } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Linking, type StyleProp, type ViewStyle } from 'react-native';
 import { useNativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import SocialPromoCard from './SocialPromoCard';
+
+const SOCIAL_PROMO_IMAGE = require('../assets/social_promo.png');
 
 const NATIVE_AD_UNIT_ID = __DEV__
   ? TestIds.NATIVE
@@ -12,9 +14,21 @@ const NATIVE_AD_UNIT_ID = __DEV__
 export const nativeAdSupported = typeof useNativeAd === 'function';
 
 export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
-  // style prop yoksa grid slotundayız → kompakt fallback
   const compact = !style;
-  if (!nativeAdSupported) return <SocialPromoCard style={style} compact={compact} />;
+  if (!nativeAdSupported) {
+    if (compact) {
+      return (
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={styles.imageCard}
+          onPress={() => Linking.openURL('https://instagram.com/indivaapp').catch(() => {})}
+        >
+          <Image source={SOCIAL_PROMO_IMAGE} style={styles.imageCardImg} resizeMode="cover" />
+        </TouchableOpacity>
+      );
+    }
+    return <SocialPromoCard style={style} />;
+  }
   return <NativeAdCardInner style={style} compact={compact} />;
 }
 
@@ -90,6 +104,17 @@ function NativeAdCardInner({ style, compact }: { style?: StyleProp<ViewStyle>; c
 }
 
 const styles = StyleSheet.create({
+  imageCard: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  imageCardImg: { width: '100%', height: '100%' },
   container: {
     flex: 1,
     borderRadius: 12,
