@@ -1,5 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { Colors } from '../constants/colors';
+import { useTheme } from '../context/ThemeContext';
 
 const ACCOUNTS = [
   {
@@ -29,9 +31,19 @@ const ACCOUNTS = [
 ];
 
 export default function SocialPromoCard() {
+  const { effectiveTheme } = useTheme();
+  const isDark = effectiveTheme === 'dark';
+
+  const containerBg = isDark ? Colors.gray800 : Colors.white;
+  const titleColor = Colors.orange;
+  const subtitleColor = isDark ? Colors.gray400 : Colors.gray500;
+  const followBtnBg = isDark ? Colors.gray700 : Colors.gray100;
+  const followBtnText = isDark ? Colors.white : Colors.gray800;
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>İNDİVA SOSYAL{'\n'}MEDYADA!</Text>
+    <View style={[styles.container, { backgroundColor: containerBg }]}>
+      <Text style={[styles.title, { color: titleColor }]}>İNDİVA</Text>
+      <Text style={[styles.subtitle, { color: subtitleColor }]}>Sosyal medyada takip et</Text>
 
       {ACCOUNTS.map(acc => (
         <TouchableOpacity
@@ -46,8 +58,8 @@ export default function SocialPromoCard() {
         >
           <Text style={styles.rowIcon}>{acc.icon}</Text>
           <Text style={styles.rowHandle} numberOfLines={1}>{acc.handle}</Text>
-          <View style={styles.followBtn}>
-            <Text style={styles.followText}>Takip Et</Text>
+          <View style={[styles.followBtn, { backgroundColor: followBtnBg }]}>
+            <Text style={[styles.followText, { color: followBtnText }]}>Takip Et</Text>
           </View>
         </TouchableOpacity>
       ))}
@@ -59,25 +71,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     borderRadius: 12,
-    backgroundColor: '#1a2c5e',
     padding: 12,
     gap: 8,
-    alignItems: 'stretch',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   title: {
-    color: '#ffffff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '900',
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 2,
+    fontFamily: 'PlayfairDisplay-VariableFont_wght',
+  },
+  subtitle: {
+    fontSize: 11,
+    textAlign: 'center',
+    fontWeight: '600',
+    marginTop: -4,
   },
   row: {
     flexDirection: 'row',
@@ -87,22 +100,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 8,
   },
-  rowIcon: { fontSize: 20 },
-  rowHandle: {
-    flex: 1,
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 13,
-  },
+  rowIcon: { fontSize: 18 },
+  rowHandle: { flex: 1, color: '#ffffff', fontWeight: '700', fontSize: 12 },
   followBtn: {
-    backgroundColor: '#ffffff',
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  followText: {
-    color: '#1a2c5e',
-    fontSize: 11,
-    fontWeight: '800',
-  },
+  followText: { fontSize: 10, fontWeight: '800' },
 });
