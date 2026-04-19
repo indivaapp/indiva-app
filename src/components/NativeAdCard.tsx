@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, Image, StyleSheet, ActivityIndicator } from 'react-native';
 import { useNativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
+import SocialPromoCard from './SocialPromoCard';
 
 const NATIVE_AD_UNIT_ID = __DEV__
   ? TestIds.NATIVE
@@ -27,9 +28,9 @@ export default function NativeAdCard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Yükleme başarısız — placeholder göster (boş alan bırakmak yerine)
+  // Yükleme başarısız — sosyal medya kartı göster
   if (loadFailed) {
-    return <View style={[styles.container, { backgroundColor: cardBg }]} />;
+    return <SocialPromoCard />;
   }
 
   // Yükleniyor
