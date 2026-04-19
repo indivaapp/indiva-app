@@ -9,7 +9,17 @@ const NATIVE_AD_UNIT_ID = __DEV__
   ? TestIds.NATIVE
   : 'ca-app-pub-3675503435035155/8909740660';
 
+// useNativeAd hook'u bu pakette mevcut değilse SocialPromoCard göster
+const nativeAdSupported = typeof useNativeAd === 'function';
+
 export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
+  if (!nativeAdSupported) {
+    return <SocialPromoCard style={style} />;
+  }
+  return <NativeAdCardInner style={style} />;
+}
+
+function NativeAdCardInner({ style }: { style?: StyleProp<ViewStyle> }) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
   const cardBg = isDark ? Colors.gray800 : Colors.white;
@@ -22,7 +32,6 @@ export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> }
     onAdFailedToLoad: () => setLoadFailed(true),
   });
 
-  // Boş bağımlılık dizisi — sadece mount'ta bir kez yükle
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -32,7 +41,6 @@ export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> }
     return <SocialPromoCard style={style} />;
   }
 
-  // Yükleniyor
   if (!isLoaded || !nativeAd) {
     return (
       <View style={[styles.container, styles.loadingContainer, { backgroundColor: cardBg }, style]}>
@@ -45,24 +53,19 @@ export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> }
   const iconUrl = nativeAd.icon?.url;
 
   return (
-    // overflow: 'hidden' KULLANMA — AdMob'un AdChoices ikonunu keser (politika ihlali)
     <NativeAdView nativeAd={nativeAd} style={[styles.container, { backgroundColor: cardBg }, style]}>
-
-      {/* Zorunlu: "Sponsorlu" etiketi AdMob politikası gereği */}
       <View style={[styles.sponsoredBadge, { backgroundColor: isDark ? Colors.gray700 : Colors.gray200 }]}>
         <Text style={[styles.sponsoredText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>
           Sponsorlu
         </Text>
       </View>
 
-      {/* Ana görsel */}
       {mainImageUrl ? (
         <Image source={{ uri: mainImageUrl }} style={styles.mainImage} resizeMode="cover" />
       ) : iconUrl ? (
         <Image source={{ uri: iconUrl }} style={styles.mainImage} resizeMode="cover" />
       ) : null}
 
-      {/* Reklamveren ikonu + başlık yan yana */}
       <View style={styles.headlineRow}>
         {iconUrl && mainImageUrl ? (
           <Image source={{ uri: iconUrl }} style={styles.advertiserIcon} resizeMode="cover" />
@@ -72,21 +75,17 @@ export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> }
         </Text>
       </View>
 
-      {/* Açıklama */}
       {nativeAd.body ? (
         <Text style={[styles.body, { color: isDark ? Colors.gray400 : Colors.gray500 }]} numberOfLines={2}>
           {nativeAd.body}
         </Text>
       ) : null}
 
-      {/* CTA Butonu */}
       {nativeAd.callToAction ? (
         <View style={styles.ctaBtn}>
           <Text style={styles.ctaText} numberOfLines={1}>{nativeAd.callToAction}</Text>
         </View>
       ) : null}
-
-      {/* Not: AdChoices ikonu NativeAdView tarafından otomatik eklenir — kesmemek için overflow:hidden yok */}
     </NativeAdView>
   );
 }
