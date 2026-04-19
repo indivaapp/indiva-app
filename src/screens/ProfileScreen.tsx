@@ -12,6 +12,7 @@ import {
   getContributionStats, setClaimedTierMin, BADGE_TIERS, ContributionStats, Badge,
 } from '../services/contributionService';
 import { loadVotesCache } from '../services/voteService';
+import NativeAdCard from '../components/NativeAdCard';
 import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -315,6 +316,8 @@ export default function ProfileScreen() {
           </View>
 
           <Text style={{ textAlign: 'center', color: Colors.gray400, fontSize: 12, marginTop: 8 }}>İNDİVA v1.2.0</Text>
+
+          <NativeAdCard style={{ alignSelf: 'stretch', marginTop: 8 }} />
         </View>
       </ScrollView>
 
