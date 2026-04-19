@@ -22,7 +22,7 @@ import {
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { InterstitialAd, BannerAd, BannerAdSize, AdEventType, TestIds } from 'react-native-google-mobile-ads';
+import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 import NativeAdCard from '../components/NativeAdCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -41,18 +41,9 @@ import type { Discount } from '../types';
 type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>;
 const { width: SCREEN_W } = Dimensions.get('window');
 
-const INTERSTITIAL_AD_UNIT_ID = __DEV__
-  ? TestIds.INTERSTITIAL
-  : 'ca-app-pub-3675503435035155/1880723761';
-
 const BANNER_AD_UNIT_ID = __DEV__
   ? TestIds.ADAPTIVE_BANNER
   : 'ca-app-pub-3675503435035155/8261572668';
-
-
-const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
-  requestNonPersonalizedAdsOnly: true,
-});
 
 const getFavoriteIds = async (): Promise<string[]> => {
   try {
@@ -245,14 +236,6 @@ export default function DetailScreen({ route }: Props) {
   }, [discount?.id]);
 
   // Load interstitial ad — hata olursa 3 saniye sonra tekrar dene
-  useEffect(() => {
-    if (!interstitial.loaded) interstitial.load();
-    const unsubError = interstitial.addAdEventListener(AdEventType.ERROR, () => {
-      setTimeout(() => { try { interstitial.load(); } catch {} }, 3000);
-    });
-    return () => unsubError();
-  }, []);
-
   useEffect(() => {
     getFavoriteIds().then(setFavorites);
     setVotes(getVotes());
@@ -504,34 +487,9 @@ export default function DetailScreen({ route }: Props) {
     await AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(next));
   };
 
-  const handleGoToDiscount = async () => {
+  const handleGoToDiscount = () => {
     if (isAd) { if (d.link) Linking.openURL(d.link); return; }
-    if (!isExpired && d.link) {
-      const raw = await AsyncStorage.getItem('firsataGitCount');
-      const count = parseInt(raw || '0') + 1;
-      await AsyncStorage.setItem('firsataGitCount', String(count));
-      if (count % 3 === 0) {
-        const link = d.link;
-        if (interstitial.loaded) {
-          const unsubClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
-            unsubClosed();
-            Linking.openURL(link);
-            interstitial.load();
-          });
-          interstitial.show().catch(() => {
-            unsubClosed();
-            Linking.openURL(link);
-          });
-          return;
-        }
-        // Yüklü değilse bir sonraki 3'lü için sıfırla ve yüklemeyi başlat
-        await AsyncStorage.setItem('firsataGitCount', '0');
-        try { interstitial.load(); } catch {}
-      }
-      {
-        Linking.openURL(d.link);
-      }
-    }
+    if (!isExpired && d.link) Linking.openURL(d.link);
   };
 
   const handleVote = async (voteType: 'active' | 'expired') => {
