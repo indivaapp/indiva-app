@@ -7,6 +7,7 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { Colors } from './src/constants/colors';
 import RootNavigator from './src/navigation';
 import SplashScreen from './src/components/SplashScreen';
+import MobileAds from 'react-native-google-mobile-ads';
 import {
   loadVotesCache,
 } from './src/services/voteService';
@@ -44,7 +45,7 @@ function AppContent() {
 
   useEffect(() => {
     // Load caches, then hide splash
-    Promise.all([loadVotesCache(), loadNotificationsCache()]).finally(() => {
+    Promise.all([loadVotesCache(), loadNotificationsCache(), MobileAds().initialize()]).finally(() => {
       setNotificationCount(getNotificationCount());
       setTimeout(() => {
         Animated.timing(splashOpacity, {
