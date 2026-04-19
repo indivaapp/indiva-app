@@ -16,7 +16,7 @@ import {
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import NativeAdCard from '../components/NativeAdCard';
+import NativeAdCard, { nativeAdSupported } from '../components/NativeAdCard';
 import { fetchDiscounts, fetchDiscountsByCategory, getOfflineCache } from '../services/firebaseService';
 import { fetchInfluencerPosts, getSeenPostIds } from '../services/influencerService';
 import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
@@ -252,7 +252,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       slots.push({ kind: 'discount', item: filteredDiscounts[i] });
       discountSinceLastInf++;
 
-      if ((i + 1) % 4 === 0) {
+      if ((i + 1) % 4 === 0 && nativeAdSupported) {
         adCount++;
         slots.push({ kind: 'ad', adKey: `ad-${adCount}` });
       }

@@ -10,7 +10,7 @@ import { getDiscountById } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, Votes, loadVotesCache } from '../services/voteService';
 import type { Discount } from '../types';
 import DiscountCard from '../components/DiscountCard';
-import NativeAdCard from '../components/NativeAdCard';
+import NativeAdCard, { nativeAdSupported } from '../components/NativeAdCard';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
@@ -70,7 +70,7 @@ export default function FavoritesScreen() {
     let adCount = 0;
     for (let i = 0; i < favoriteDiscounts.length; i++) {
       slots.push({ kind: 'discount', item: favoriteDiscounts[i] });
-      if ((i + 1) % 4 === 0) {
+      if ((i + 1) % 4 === 0 && nativeAdSupported) {
         adCount++;
         slots.push({ kind: 'ad', adKey: `fav-ad-${adCount}` });
       }

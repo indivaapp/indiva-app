@@ -9,13 +9,10 @@ const NATIVE_AD_UNIT_ID = __DEV__
   ? TestIds.NATIVE
   : 'ca-app-pub-3675503435035155/8909740660';
 
-// useNativeAd hook'u bu pakette mevcut değilse SocialPromoCard göster
-const nativeAdSupported = typeof useNativeAd === 'function';
+export const nativeAdSupported = typeof useNativeAd === 'function';
 
 export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
-  if (!nativeAdSupported) {
-    return <SocialPromoCard style={style} />;
-  }
+  if (!nativeAdSupported) return null;
   return <NativeAdCardInner style={style} />;
 }
 
