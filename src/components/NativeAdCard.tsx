@@ -106,6 +106,7 @@ function NativeAdCardInner({ style, compact }: { style?: StyleProp<ViewStyle>; c
 const styles = StyleSheet.create({
   imageCard: {
     flex: 1,
+    aspectRatio: 0.65,
     borderRadius: 12,
     overflow: 'hidden',
     elevation: 3,
@@ -114,7 +115,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 4,
   },
-  imageCardImg: { width: '100%', height: '100%' },
+  imageCardImg: { ...StyleSheet.absoluteFillObject },
   container: {
     flex: 1,
     borderRadius: 12,
