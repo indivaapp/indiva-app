@@ -260,24 +260,9 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       }
     }
 
-    // Reklam slotları her zaman tek başına tam satır — indirim kartlarıyla eşleşmez
     const rows: HomeRow[] = [];
-    let i = 0;
-    while (i < slots.length) {
-      const left = slots[i];
-      if (left.kind === 'ad') {
-        rows.push({ rowKey: `row-${i}`, left, right: null });
-        i++;
-      } else {
-        const right = slots[i + 1];
-        if (!right || right.kind === 'ad') {
-          rows.push({ rowKey: `row-${i}`, left, right: null });
-          i++;
-        } else {
-          rows.push({ rowKey: `row-${i}`, left, right });
-          i += 2;
-        }
-      }
+    for (let i = 0; i < slots.length; i += 2) {
+      rows.push({ rowKey: `row-${i}`, left: slots[i], right: slots[i + 1] ?? null });
     }
     return rows;
   }, [filteredDiscounts, influencerPosts]);
@@ -311,21 +296,12 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     );
   };
 
-  const renderItem = ({ item }: { item: HomeRow }) => {
-    if (item.left.kind === 'ad') {
-      return (
-        <View style={styles.fullWidthAdRow}>
-          <NativeAdCard style={{ alignSelf: 'stretch' }} />
-        </View>
-      );
-    }
-    return (
-      <View style={styles.row}>
-        {renderSlot(item.left)}
-        {renderSlot(item.right)}
-      </View>
-    );
-  };
+  const renderItem = ({ item }: { item: HomeRow }) => (
+    <View style={styles.row}>
+      {renderSlot(item.left)}
+      {renderSlot(item.right)}
+    </View>
+  );
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const headerBg = isDark ? Colors.gray800 : Colors.white;
@@ -611,21 +587,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardWrapper: { flex: 1 },
-  fullWidthAdRow: {
-    marginHorizontal: 0,
-    marginBottom: 8,
-  },
-  promoBanner: {
-    height: 200,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 8,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-  },
   skeletonGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

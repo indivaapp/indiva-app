@@ -3,7 +3,6 @@ import { View, Text, Image, StyleSheet, ActivityIndicator, type StyleProp, type 
 import { useNativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
-import SocialPromoCard from './SocialPromoCard';
 
 const NATIVE_AD_UNIT_ID = __DEV__
   ? TestIds.NATIVE
@@ -12,9 +11,7 @@ const NATIVE_AD_UNIT_ID = __DEV__
 export const nativeAdSupported = typeof useNativeAd === 'function';
 
 export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
-  if (!nativeAdSupported) {
-    return style ? <SocialPromoCard style={style} /> : null;
-  }
+  if (!nativeAdSupported) return null;
   return <NativeAdCardInner style={style} />;
 }
 
@@ -36,13 +33,11 @@ function NativeAdCardInner({ style }: { style?: StyleProp<ViewStyle> }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (loadFailed) {
-    return style ? <SocialPromoCard style={style} /> : null;
-  }
+  if (loadFailed) return null;
 
   if (!isLoaded || !nativeAd) {
     return (
-      <View style={[styles.container, styles.loadingContainer, { backgroundColor: cardBg }, style]}>
+      <View style={[styles.container, styles.loading, { backgroundColor: cardBg }, style]}>
         <ActivityIndicator color={Colors.orange} size="small" />
       </View>
     );
@@ -66,9 +61,9 @@ function NativeAdCardInner({ style }: { style?: StyleProp<ViewStyle> }) {
       ) : null}
 
       <View style={styles.headlineRow}>
-        {iconUrl && mainImageUrl ? (
+        {iconUrl && mainImageUrl && (
           <Image source={{ uri: iconUrl }} style={styles.advertiserIcon} resizeMode="cover" />
-        ) : null}
+        )}
         <Text style={[styles.headline, { color: textColor }]} numberOfLines={2}>
           {nativeAd.headline}
         </Text>
@@ -101,8 +96,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  loadingContainer: {
-    minHeight: 120,
+  loading: {
+    minHeight: 200,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -115,7 +110,7 @@ const styles = StyleSheet.create({
   sponsoredText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
   mainImage: {
     width: '100%',
-    aspectRatio: 1.8,
+    aspectRatio: 1,
     borderRadius: 8,
     backgroundColor: Colors.gray200,
   },
