@@ -37,7 +37,7 @@ function NativeAdCardInner({ style }: { style?: StyleProp<ViewStyle> }) {
   }, []);
 
   if (loadFailed) {
-    return <SocialPromoCard style={style} />;
+    return style ? <SocialPromoCard style={style} /> : null;
   }
 
   if (!isLoaded || !nativeAd) {

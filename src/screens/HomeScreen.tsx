@@ -12,8 +12,6 @@ import {
   StatusBar,
   BackHandler,
   Modal,
-  Image,
-  Linking,
 } from 'react-native';
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -315,25 +313,10 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
 
   const renderItem = ({ item }: { item: HomeRow }) => {
     if (item.left.kind === 'ad') {
-      if (nativeAdSupported) {
-        return (
-          <View style={styles.fullWidthAdRow}>
-            <NativeAdCard style={{ alignSelf: 'stretch' }} />
-          </View>
-        );
-      }
       return (
-        <TouchableOpacity
-          style={styles.promoBanner}
-          activeOpacity={0.9}
-          onPress={() => Linking.openURL('https://instagram.com/indivaapp').catch(() => {})}
-        >
-          <Image
-            source={require('../assets/social_promo.png')}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="cover"
-          />
-        </TouchableOpacity>
+        <View style={styles.fullWidthAdRow}>
+          <NativeAdCard style={{ alignSelf: 'stretch' }} />
+        </View>
       );
     }
     return (
