@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Linking, type StyleProp, type ViewStyle } from 'react-native';
+import { View, Text, Image, StyleSheet, ActivityIndicator, type StyleProp, type ViewStyle } from 'react-native';
 import { useNativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import SocialPromoCard from './SocialPromoCard';
-
-const SOCIAL_PROMO_IMAGE = require('../assets/social_promo.png');
 
 const NATIVE_AD_UNIT_ID = __DEV__
   ? TestIds.NATIVE
@@ -14,25 +12,13 @@ const NATIVE_AD_UNIT_ID = __DEV__
 export const nativeAdSupported = typeof useNativeAd === 'function';
 
 export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
-  const compact = !style;
   if (!nativeAdSupported) {
-    if (compact) {
-      return (
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={styles.imageCard}
-          onPress={() => Linking.openURL('https://instagram.com/indivaapp').catch(() => {})}
-        >
-          <Image source={SOCIAL_PROMO_IMAGE} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-        </TouchableOpacity>
-      );
-    }
-    return <SocialPromoCard style={style} />;
+    return style ? <SocialPromoCard style={style} /> : null;
   }
-  return <NativeAdCardInner style={style} compact={compact} />;
+  return <NativeAdCardInner style={style} />;
 }
 
-function NativeAdCardInner({ style, compact }: { style?: StyleProp<ViewStyle>; compact: boolean }) {
+function NativeAdCardInner({ style }: { style?: StyleProp<ViewStyle> }) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
   const cardBg = isDark ? Colors.gray800 : Colors.white;
@@ -51,7 +37,7 @@ function NativeAdCardInner({ style, compact }: { style?: StyleProp<ViewStyle>; c
   }, []);
 
   if (loadFailed) {
-    return <SocialPromoCard style={style} compact={compact} />;
+    return <SocialPromoCard style={style} />;
   }
 
   if (!isLoaded || !nativeAd) {
@@ -104,18 +90,6 @@ function NativeAdCardInner({ style, compact }: { style?: StyleProp<ViewStyle>; c
 }
 
 const styles = StyleSheet.create({
-  imageCard: {
-    flex: 1,
-    alignSelf: 'stretch',
-    borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-  },
-  imageCardImg: { ...StyleSheet.absoluteFillObject },
   container: {
     flex: 1,
     borderRadius: 12,
@@ -128,7 +102,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   loadingContainer: {
-    minHeight: 200,
+    minHeight: 120,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -141,7 +115,7 @@ const styles = StyleSheet.create({
   sponsoredText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
   mainImage: {
     width: '100%',
-    aspectRatio: 1,
+    aspectRatio: 1.8,
     borderRadius: 8,
     backgroundColor: Colors.gray200,
   },

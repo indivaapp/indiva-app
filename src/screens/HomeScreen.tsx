@@ -12,6 +12,8 @@ import {
   StatusBar,
   BackHandler,
   Modal,
+  Image,
+  Linking,
 } from 'react-native';
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -242,7 +244,6 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   type HomeRow = { rowKey: string; left: HomeSlot; right: HomeSlot | null };
 
   const listItems = useMemo<HomeRow[]>(() => {
-    // Düz slot dizisi: 4 indirim → 1 reklam, 6 indirimde bir 1 influencer kartı
     const slots: HomeSlot[] = [];
     let adCount = 0;
     let infIdx = 0;
@@ -251,21 +252,34 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     for (let i = 0; i < filteredDiscounts.length; i++) {
       slots.push({ kind: 'discount', item: filteredDiscounts[i] });
       discountSinceLastInf++;
-
       if ((i + 1) % 4 === 0) {
         adCount++;
         slots.push({ kind: 'ad', adKey: `ad-${adCount}` });
       }
-
       if (discountSinceLastInf === 6 && infIdx < influencerPosts.length) {
         slots.push({ kind: 'influencer', item: influencerPosts[infIdx++] });
         discountSinceLastInf = 0;
       }
     }
-    // İkişerli sıralara böl
+
+    // Reklam slotları her zaman tek başına tam satır — indirim kartlarıyla eşleşmez
     const rows: HomeRow[] = [];
-    for (let i = 0; i < slots.length; i += 2) {
-      rows.push({ rowKey: `row-${i}`, left: slots[i], right: slots[i + 1] ?? null });
+    let i = 0;
+    while (i < slots.length) {
+      const left = slots[i];
+      if (left.kind === 'ad') {
+        rows.push({ rowKey: `row-${i}`, left, right: null });
+        i++;
+      } else {
+        const right = slots[i + 1];
+        if (!right || right.kind === 'ad') {
+          rows.push({ rowKey: `row-${i}`, left, right: null });
+          i++;
+        } else {
+          rows.push({ rowKey: `row-${i}`, left, right });
+          i += 2;
+        }
+      }
     }
     return rows;
   }, [filteredDiscounts, influencerPosts]);
@@ -299,12 +313,36 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     );
   };
 
-  const renderItem = ({ item }: { item: HomeRow }) => (
-    <View style={styles.row}>
-      {renderSlot(item.left)}
-      {renderSlot(item.right)}
-    </View>
-  );
+  const renderItem = ({ item }: { item: HomeRow }) => {
+    if (item.left.kind === 'ad') {
+      if (nativeAdSupported) {
+        return (
+          <View style={styles.fullWidthAdRow}>
+            <NativeAdCard style={{ alignSelf: 'stretch' }} />
+          </View>
+        );
+      }
+      return (
+        <TouchableOpacity
+          style={styles.promoBanner}
+          activeOpacity={0.9}
+          onPress={() => Linking.openURL('https://instagram.com/indivaapp').catch(() => {})}
+        >
+          <Image
+            source={require('../assets/social_promo.png')}
+            style={StyleSheet.absoluteFillObject}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
+      );
+    }
+    return (
+      <View style={styles.row}>
+        {renderSlot(item.left)}
+        {renderSlot(item.right)}
+      </View>
+    );
+  };
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const headerBg = isDark ? Colors.gray800 : Colors.white;
@@ -586,11 +624,25 @@ const styles = StyleSheet.create({
   listContainer: { padding: 8 },
   row: {
     flexDirection: 'row',
-    alignItems: 'stretch',
     gap: 8,
     marginBottom: 8,
   },
   cardWrapper: { flex: 1 },
+  fullWidthAdRow: {
+    marginHorizontal: 0,
+    marginBottom: 8,
+  },
+  promoBanner: {
+    height: 200,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 8,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
   skeletonGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
