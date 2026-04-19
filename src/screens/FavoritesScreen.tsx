@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
@@ -10,11 +10,15 @@ import { getDiscountById } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, Votes, loadVotesCache } from '../services/voteService';
 import type { Discount } from '../types';
 import DiscountCard from '../components/DiscountCard';
+import NativeAdCard from '../components/NativeAdCard';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
+
+type FavSlot = { kind: 'discount'; item: Discount } | { kind: 'ad'; adKey: string };
+type FavRow = { rowKey: string; left: FavSlot; right: FavSlot | null };
 
 export default function FavoritesScreen() {
   const { effectiveTheme } = useTheme();
@@ -31,7 +35,6 @@ export default function FavoritesScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
-  const cardBg = isDark ? Colors.gray800 : Colors.white;
   const textColor = isDark ? Colors.white : Colors.gray800;
 
   const fetchFavorites = useCallback(async () => {
@@ -42,10 +45,7 @@ export default function FavoritesScreen() {
       setVotes(getVotes());
       const stored = await AsyncStorage.getItem('favoriteDiscounts');
       const ids: string[] = stored ? JSON.parse(stored) : [];
-      if (ids.length === 0) {
-        setFavoriteDiscounts([]);
-        return;
-      }
+      if (ids.length === 0) { setFavoriteDiscounts([]); return; }
       const results = await Promise.all(ids.map(id => getDiscountById(id).catch(() => null)));
       setFavoriteDiscounts(results.filter((d): d is Discount => d !== null));
     } catch {
@@ -63,6 +63,53 @@ export default function FavoritesScreen() {
     const ids: string[] = stored ? JSON.parse(stored) : [];
     await AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(ids.filter(id => id !== discountId)));
   };
+
+  // Slot tabanlı liste: 4 ilan → 1 reklam → 4 ilan → ...
+  const listItems = useMemo<FavRow[]>(() => {
+    const slots: FavSlot[] = [];
+    let adCount = 0;
+    for (let i = 0; i < favoriteDiscounts.length; i++) {
+      slots.push({ kind: 'discount', item: favoriteDiscounts[i] });
+      if ((i + 1) % 4 === 0) {
+        adCount++;
+        slots.push({ kind: 'ad', adKey: `fav-ad-${adCount}` });
+      }
+    }
+    const rows: FavRow[] = [];
+    for (let i = 0; i < slots.length; i += 2) {
+      rows.push({ rowKey: `fav-row-${i}`, left: slots[i], right: slots[i + 1] ?? null });
+    }
+    return rows;
+  }, [favoriteDiscounts]);
+
+  const renderSlot = (slot: FavSlot | null) => {
+    if (!slot) return <View style={styles.cardWrapper} />;
+    if (slot.kind === 'ad') {
+      return (
+        <View style={styles.cardWrapper}>
+          <NativeAdCard />
+        </View>
+      );
+    }
+    return (
+      <View style={styles.cardWrapper}>
+        <DiscountCard
+          discount={slot.item}
+          isFavorite
+          onToggleFavorite={() => handleRemoveFavorite(slot.item.id)}
+          isExpired={isDiscountExpired(slot.item.id, votes)}
+          discountList={favoriteDiscounts}
+        />
+      </View>
+    );
+  };
+
+  const renderItem = ({ item }: { item: FavRow }) => (
+    <View style={styles.row}>
+      {renderSlot(item.left)}
+      {renderSlot(item.right)}
+    </View>
+  );
 
   if (isLoading) {
     return (
@@ -102,24 +149,10 @@ export default function FavoritesScreen() {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={favoriteDiscounts.length % 2 !== 0 ? [...favoriteDiscounts, null] : favoriteDiscounts}
-          keyExtractor={item => item ? item.id : '__placeholder__'}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
+          data={listItems}
+          keyExtractor={item => item.rowKey}
+          renderItem={renderItem}
           contentContainerStyle={[styles.listContainer, { paddingTop: insets.top, paddingBottom: insets.bottom + 80 }]}
-          renderItem={({ item }) => (
-            <View style={styles.cardWrapper}>
-              {item ? (
-                <DiscountCard
-                  discount={item}
-                  isFavorite
-                  onToggleFavorite={() => handleRemoveFavorite(item.id)}
-                  isExpired={isDiscountExpired(item.id, votes)}
-                  discountList={favoriteDiscounts}
-                />
-              ) : null}
-            </View>
-          )}
         />
       )}
     </View>
@@ -155,6 +188,6 @@ const styles = StyleSheet.create({
   },
   exploreBtnText: { color: Colors.white, fontWeight: '700', fontSize: 15 },
   listContainer: { padding: 8 },
-  row: { gap: 8, marginBottom: 8 },
+  row: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   cardWrapper: { flex: 1 },
 });
