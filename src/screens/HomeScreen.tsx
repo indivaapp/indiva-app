@@ -252,7 +252,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       slots.push({ kind: 'discount', item: filteredDiscounts[i] });
       discountSinceLastInf++;
 
-      if ((i + 1) % 4 === 0 && nativeAdSupported) {
+      if ((i + 1) % 4 === 0) {
         adCount++;
         slots.push({ kind: 'ad', adKey: `ad-${adCount}` });
       }

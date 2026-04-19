@@ -12,11 +12,13 @@ const NATIVE_AD_UNIT_ID = __DEV__
 export const nativeAdSupported = typeof useNativeAd === 'function';
 
 export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
-  if (!nativeAdSupported) return null;
-  return <NativeAdCardInner style={style} />;
+  // style prop yoksa grid slotundayız → kompakt fallback
+  const compact = !style;
+  if (!nativeAdSupported) return <SocialPromoCard style={style} compact={compact} />;
+  return <NativeAdCardInner style={style} compact={compact} />;
 }
 
-function NativeAdCardInner({ style }: { style?: StyleProp<ViewStyle> }) {
+function NativeAdCardInner({ style, compact }: { style?: StyleProp<ViewStyle>; compact: boolean }) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
   const cardBg = isDark ? Colors.gray800 : Colors.white;
@@ -35,7 +37,7 @@ function NativeAdCardInner({ style }: { style?: StyleProp<ViewStyle> }) {
   }, []);
 
   if (loadFailed) {
-    return <SocialPromoCard style={style} />;
+    return <SocialPromoCard style={style} compact={compact} />;
   }
 
   if (!isLoaded || !nativeAd) {

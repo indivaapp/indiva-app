@@ -70,7 +70,7 @@ export default function FavoritesScreen() {
     let adCount = 0;
     for (let i = 0; i < favoriteDiscounts.length; i++) {
       slots.push({ kind: 'discount', item: favoriteDiscounts[i] });
-      if ((i + 1) % 4 === 0 && nativeAdSupported) {
+      if ((i + 1) % 4 === 0) {
         adCount++;
         slots.push({ kind: 'ad', adKey: `fav-ad-${adCount}` });
       }

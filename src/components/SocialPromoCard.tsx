@@ -30,7 +30,12 @@ const ACCOUNTS = [
   },
 ];
 
-export default function SocialPromoCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
+interface Props {
+  style?: StyleProp<ViewStyle>;
+  compact?: boolean;
+}
+
+export default function SocialPromoCard({ style, compact = false }: Props) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
 
@@ -39,6 +44,28 @@ export default function SocialPromoCard({ style }: { style?: StyleProp<ViewStyle
   const subtitleColor = isDark ? Colors.gray400 : Colors.gray500;
   const followBtnBg = isDark ? Colors.gray700 : Colors.gray100;
   const followBtnText = isDark ? Colors.white : Colors.gray800;
+
+  if (compact) {
+    return (
+      <View style={[styles.compactContainer, { backgroundColor: containerBg }, style]}>
+        <Text style={[styles.compactTitle, { color: titleColor }]}>İNDİVA</Text>
+        <Text style={[styles.compactSubtitle, { color: subtitleColor }]}>Bizi takip et</Text>
+        <View style={styles.compactIcons}>
+          {ACCOUNTS.map(acc => (
+            <TouchableOpacity
+              key={acc.key}
+              activeOpacity={0.8}
+              onPress={() => Linking.openURL(acc.url).catch(() => {})}
+              style={[styles.compactIconBtn, { backgroundColor: acc.rowBg }]}
+            >
+              <Text style={styles.compactIconText}>{acc.icon}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <Text style={[styles.compactHandle, { color: subtitleColor }]}>@indivaapp</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: containerBg }, style]}>
@@ -68,6 +95,36 @@ export default function SocialPromoCard({ style }: { style?: StyleProp<ViewStyle
 }
 
 const styles = StyleSheet.create({
+  compactContainer: {
+    flex: 1,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  compactTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 2,
+    fontFamily: 'PlayfairDisplay-VariableFont_wght',
+  },
+  compactSubtitle: { fontSize: 10, fontWeight: '600' },
+  compactIcons: { flexDirection: 'row', gap: 10 },
+  compactIconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactIconText: { fontSize: 20 },
+  compactHandle: { fontSize: 10, fontWeight: '600' },
   container: {
     flex: 1,
     borderRadius: 12,
