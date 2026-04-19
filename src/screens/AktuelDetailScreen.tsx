@@ -7,7 +7,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
+import NativeAdCard from '../components/NativeAdCard';
 import { fetchBrochuresByStore } from '../services/firebaseService';
 import OptimizedImage from '../components/OptimizedImage';
 import { Colors } from '../constants/colors';
@@ -15,13 +15,6 @@ import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
 import type { Brochure } from '../types';
 
-const BANNER_AD_UNIT_ID = __DEV__
-  ? TestIds.ADAPTIVE_BANNER
-  : 'ca-app-pub-3675503435035155/8261572668';
-
-const MREC_AD_UNIT_ID = __DEV__
-  ? TestIds.ADAPTIVE_BANNER
-  : 'ca-app-pub-3675503435035155/8261572668';
 
 type ListItem =
   | { type: 'brochure'; data: Brochure; index: number }
@@ -236,25 +229,10 @@ export default function AktuelDetailScreen({ route }: Props) {
         }
         contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
         renderItem={({ item }) => {
-          if (item.type === 'banner') {
+          if (item.type === 'banner' || item.type === 'footer') {
             return (
-              <View style={styles.bannerWrapper}>
-                <BannerAd
-                  unitId={BANNER_AD_UNIT_ID}
-                  size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-                  requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-                />
-              </View>
-            );
-          }
-          if (item.type === 'footer') {
-            return (
-              <View style={styles.mrecWrapper}>
-                <BannerAd
-                  unitId={MREC_AD_UNIT_ID}
-                  size={BannerAdSize.MEDIUM_RECTANGLE}
-                  requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-                />
+              <View style={styles.nativeAdWrapper}>
+                <NativeAdCard style={{ alignSelf: 'stretch' }} />
               </View>
             );
           }
@@ -421,8 +399,7 @@ const styles = StyleSheet.create({
   brochureImageContainer: { aspectRatio: 3 / 4, width: '100%', backgroundColor: Colors.gray100 },
   brochureInfo: { padding: 12, gap: 4 },
   brochureTitle: { fontSize: 14, fontWeight: '700' },
-  bannerWrapper: { alignItems: 'center', marginVertical: 4 },
-  mrecWrapper: { alignItems: 'center', marginTop: 8, marginBottom: 4 },
+  nativeAdWrapper: { marginHorizontal: 8, marginVertical: 6 },
   lightboxBg: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.95)',
