@@ -586,6 +586,7 @@ const styles = StyleSheet.create({
   listContainer: { padding: 8 },
   row: {
     flexDirection: 'row',
+    alignItems: 'stretch',
     gap: 8,
     marginBottom: 8,
   },

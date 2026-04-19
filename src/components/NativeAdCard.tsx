@@ -23,7 +23,7 @@ export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> }
           style={styles.imageCard}
           onPress={() => Linking.openURL('https://instagram.com/indivaapp').catch(() => {})}
         >
-          <Image source={SOCIAL_PROMO_IMAGE} style={styles.imageCardImg} resizeMode="cover" />
+          <Image source={SOCIAL_PROMO_IMAGE} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
         </TouchableOpacity>
       );
     }
@@ -106,7 +106,7 @@ function NativeAdCardInner({ style, compact }: { style?: StyleProp<ViewStyle>; c
 const styles = StyleSheet.create({
   imageCard: {
     flex: 1,
-    aspectRatio: 0.65,
+    alignSelf: 'stretch',
     borderRadius: 12,
     overflow: 'hidden',
     elevation: 3,
