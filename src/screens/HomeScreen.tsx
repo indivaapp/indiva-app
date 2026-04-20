@@ -211,13 +211,13 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     if (!slot) return <View style={styles.cardWrapper} />;
     if (slot.kind === 'ad') {
       return (
-        <View style={styles.cardWrapper}>
+        <View key={slot.adKey} style={styles.cardWrapper}>
           <NativeAdCard />
         </View>
       );
     }
     return (
-      <View style={styles.cardWrapper}>
+      <View key={slot.item.id} style={styles.cardWrapper}>
         <DiscountCard
           discount={slot.item}
           isFavorite={favorites.includes(slot.item.id)}
@@ -351,6 +351,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
           data={listItems}
           keyExtractor={(item) => item.rowKey}
           renderItem={renderItem}
+          removeClippedSubviews={false}
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
           ListHeaderComponent={
             <InfluencerStoriesBar
