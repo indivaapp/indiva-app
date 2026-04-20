@@ -11,6 +11,7 @@ const NATIVE_AD_UNIT_ID = __DEV__
 export const nativeAdSupported = typeof useNativeAd === 'function';
 
 export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
+  console.log('[NativeAdCard] nativeAdSupported:', nativeAdSupported);
   if (!nativeAdSupported) return null;
   return <NativeAdCardInner style={style} />;
 }
@@ -25,13 +26,19 @@ function NativeAdCardInner({ style }: { style?: StyleProp<ViewStyle> }) {
   const { isLoaded, load, nativeAd } = useNativeAd({
     unitId: NATIVE_AD_UNIT_ID,
     requestOptions: { requestNonPersonalizedAdsOnly: true },
-    onAdFailedToLoad: () => setLoadFailed(true),
+    onAdFailedToLoad: (error: any) => {
+      console.log('[NativeAdCard] load failed:', error?.message ?? error);
+      setLoadFailed(true);
+    },
   });
 
   useEffect(() => {
+    console.log('[NativeAdCard] calling load(), unitId:', NATIVE_AD_UNIT_ID);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  console.log('[NativeAdCard] isLoaded:', isLoaded, 'loadFailed:', loadFailed, 'nativeAd:', !!nativeAd);
 
   if (loadFailed) return null;
 
