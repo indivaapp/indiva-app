@@ -11,6 +11,7 @@ import {
   Animated,
   PanResponder,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -91,6 +92,23 @@ export default function InfluencerStoryDetailScreen({ route }: Props) {
     },
     [navigation, slideX, stories.length]
   );
+
+  // Mark story as viewed in AsyncStorage
+  useEffect(() => {
+    const storyId = stories[currentIndex]?.id;
+    if (!storyId) return;
+    AsyncStorage.getItem('indiva_viewed_influencer_stories')
+      .then(v => {
+        const ids: string[] = v ? JSON.parse(v) : [];
+        if (!ids.includes(storyId)) {
+          AsyncStorage.setItem(
+            'indiva_viewed_influencer_stories',
+            JSON.stringify([...ids, storyId])
+          );
+        }
+      })
+      .catch(() => {});
+  }, [currentIndex, stories]);
 
   // Start progress animation & auto-advance whenever currentIndex changes
   useEffect(() => {

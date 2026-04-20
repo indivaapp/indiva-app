@@ -14,6 +14,7 @@ import type { InfluencerStory } from '../types';
 interface Props {
   stories: InfluencerStory[];
   loading: boolean;
+  viewedIds: string[];
   onPress: (story: InfluencerStory) => void;
 }
 
@@ -38,7 +39,7 @@ function StoryAvatar({ uri, name }: { uri: string; name: string }) {
   );
 }
 
-export default function InfluencerStoriesBar({ stories, loading, onPress }: Props) {
+export default function InfluencerStoriesBar({ stories, loading, viewedIds, onPress }: Props) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
 
@@ -61,24 +62,40 @@ export default function InfluencerStoriesBar({ stories, loading, onPress }: Prop
                 <View style={[styles.skeletonLabel, { backgroundColor: isDark ? Colors.gray700 : Colors.gray200 }]} />
               </View>
             ))
-          : stories.map(story => (
-              <TouchableOpacity
-                key={story.id}
-                style={styles.item}
-                onPress={() => onPress(story)}
-                activeOpacity={0.75}
-              >
-                <View style={styles.avatarRing}>
-                  <StoryAvatar uri={story.influencerAvatar} name={story.influencerName} />
-                </View>
-                <Text
-                  style={[styles.label, { color: isDark ? Colors.gray300 : Colors.gray600 }]}
-                  numberOfLines={1}
+          : stories.map(story => {
+              const seen = viewedIds.includes(story.id);
+              return (
+                <TouchableOpacity
+                  key={story.id}
+                  style={styles.item}
+                  onPress={() => onPress(story)}
+                  activeOpacity={0.75}
                 >
-                  {story.influencerName}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <View
+                    style={[
+                      styles.avatarRing,
+                      seen
+                        ? { borderColor: isDark ? Colors.gray600 : Colors.gray300, borderWidth: 1.5 }
+                        : { borderColor: Colors.orange, borderWidth: 2.5 },
+                    ]}
+                  >
+                    <StoryAvatar uri={story.influencerAvatar} name={story.influencerName} />
+                  </View>
+                  <Text
+                    style={[
+                      styles.label,
+                      { color: seen
+                          ? (isDark ? Colors.gray500 : Colors.gray400)
+                          : (isDark ? Colors.gray300 : Colors.gray600),
+                      },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {story.influencerName}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
       </ScrollView>
     </View>
   );

@@ -75,6 +75,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [showExitModal, setShowExitModal] = useState(false);
   const [influencerStories, setInfluencerStories] = useState<InfluencerStory[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(true);
+  const [viewedStoryIds, setViewedStoryIds] = useState<string[]>([]);
   const isLoadingRef = useRef(false);
   const flatListRef = useRef<any>(null);
   useScrollToTop(flatListRef);
@@ -97,9 +98,12 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     return () => BackHandler.removeEventListener('hardwareBackPress', onBack);
   }, []));
 
-  // Sekme odağa geldiğinde favorileri yenile (FavoritesScreen'deki değişiklikler yansısın)
+  // Sekme odağa geldiğinde favorileri ve görülmüş story ID'lerini yenile
   useFocusEffect(useCallback(() => {
     getFavoriteIds().then(setFavorites);
+    AsyncStorage.getItem('indiva_viewed_influencer_stories')
+      .then(v => setViewedStoryIds(v ? JSON.parse(v) : []))
+      .catch(() => {});
   }, []));
 
   const loadInitial = async () => {
@@ -372,6 +376,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
             <InfluencerStoriesBar
               stories={influencerStories}
               loading={storiesLoading}
+              viewedIds={viewedStoryIds}
               onPress={story =>
                 navigation.navigate('InfluencerStoryDetail', {
                   stories: influencerStories,
