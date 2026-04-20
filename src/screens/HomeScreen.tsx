@@ -76,6 +76,10 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const flatListRef = useRef<any>(null);
   useScrollToTop(flatListRef);
 
+  useFocusEffect(useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []));
+
   const allCategories = ['Tümü', ...CATEGORIES];
 
   useEffect(() => {

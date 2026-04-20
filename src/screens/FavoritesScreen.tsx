@@ -55,7 +55,10 @@ export default function FavoritesScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { fetchFavorites(); }, [fetchFavorites]));
+  useFocusEffect(useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    fetchFavorites();
+  }, [fetchFavorites]));
 
   const handleRemoveFavorite = async (discountId: string) => {
     setFavoriteDiscounts(prev => prev.filter(d => d.id !== discountId));
