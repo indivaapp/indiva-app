@@ -16,8 +16,8 @@ import {
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
 import { fetchDiscounts, getOfflineCache, fetchInfluencerStories } from '../services/firebaseService';
+import NativeAdCard from '../components/NativeAdCard';
 import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Discount, InfluencerStory } from '../types';
@@ -30,10 +30,6 @@ import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
-
-const BANNER_AD_UNIT_ID = __DEV__
-  ? 'ca-app-pub-3940256099942544/6300978111'
-  : 'ca-app-pub-3675503435035155/8261572668';
 
 interface HomeScreenProps {
   notificationCount: number;
@@ -191,68 +187,54 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     });
   }, [discounts, searchTerm, selectedCategory, votes]);
 
-  type HomeRow =
-    | { type: 'pair'; left: Discount; right: Discount | null; pairIndex: number }
-    | { type: 'banner'; key: string };
+  type HomeSlot = { kind: 'discount'; item: Discount } | { kind: 'ad'; adKey: string };
+  type HomeRow = { rowKey: string; left: HomeSlot; right: HomeSlot | null };
 
   const listItems = useMemo<HomeRow[]>(() => {
-    const rows: HomeRow[] = [];
-    for (let i = 0; i < filteredDiscounts.length; i += 2) {
-      rows.push({
-        type: 'pair',
-        left: filteredDiscounts[i],
-        right: filteredDiscounts[i + 1] ?? null,
-        pairIndex: i,
-      });
-      // Her 3 çiftten (6 ilanından) sonra banner ekle
-      const pairIndex = rows.filter(r => r.type === 'pair').length;
-      if (pairIndex % 3 === 0) {
-        rows.push({ type: 'banner', key: `banner-${i}` });
+    const slots: HomeSlot[] = [];
+    let adCount = 0;
+    for (let i = 0; i < filteredDiscounts.length; i++) {
+      slots.push({ kind: 'discount', item: filteredDiscounts[i] });
+      // Her 5 indirim kartından sonra 1 native reklam slotu ekle
+      if ((i + 1) % 5 === 0) {
+        slots.push({ kind: 'ad', adKey: `ad-${adCount++}` });
       }
+    }
+    const rows: HomeRow[] = [];
+    for (let i = 0; i < slots.length; i += 2) {
+      rows.push({ rowKey: `row-${i}`, left: slots[i], right: slots[i + 1] ?? null });
     }
     return rows;
   }, [filteredDiscounts]);
 
-  const renderItem = ({ item }: { item: HomeRow }) => {
-    if (item.type === 'banner') {
+  const renderSlot = (slot: HomeSlot | null) => {
+    if (!slot) return <View style={styles.cardWrapper} />;
+    if (slot.kind === 'ad') {
       return (
-        <View style={styles.bannerContainer}>
-          <BannerAd
-            unitId={BANNER_AD_UNIT_ID}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-          />
+        <View style={styles.cardWrapper}>
+          <NativeAdCard />
         </View>
       );
     }
-
     return (
-      <View style={styles.row}>
-        <View style={styles.cardWrapper}>
-          <DiscountCard
-            discount={item.left}
-            isFavorite={favorites.includes(item.left.id)}
-            onToggleFavorite={() => handleToggleFavorite(item.left.id)}
-            isExpired={isDiscountExpired(item.left.id, votes)}
-            discountList={filteredDiscounts}
-          />
-        </View>
-        <View style={styles.cardWrapper}>
-          {item.right ? (
-            <DiscountCard
-              discount={item.right}
-              isFavorite={favorites.includes(item.right.id)}
-              onToggleFavorite={() => handleToggleFavorite(item.right!.id)}
-              isExpired={isDiscountExpired(item.right.id, votes)}
-              discountList={filteredDiscounts}
-            />
-          ) : (
-            <View style={styles.cardWrapper} />
-          )}
-        </View>
+      <View style={styles.cardWrapper}>
+        <DiscountCard
+          discount={slot.item}
+          isFavorite={favorites.includes(slot.item.id)}
+          onToggleFavorite={() => handleToggleFavorite(slot.item.id)}
+          isExpired={isDiscountExpired(slot.item.id, votes)}
+          discountList={filteredDiscounts}
+        />
       </View>
     );
   };
+
+  const renderItem = ({ item }: { item: HomeRow }) => (
+    <View style={styles.row}>
+      {renderSlot(item.left)}
+      {renderSlot(item.right)}
+    </View>
+  );
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const headerBg = isDark ? Colors.gray800 : Colors.white;
@@ -367,9 +349,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         <FlatList
           ref={flatListRef}
           data={listItems}
-          keyExtractor={(item, index) =>
-            item.type === 'pair' ? `pair_${item.pairIndex}_${index}` : item.key
-          }
+          keyExtractor={(item) => item.rowKey}
           renderItem={renderItem}
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
           ListHeaderComponent={
@@ -553,12 +533,6 @@ const styles = StyleSheet.create({
   allDoneContainer: {
     alignItems: 'center',
     paddingVertical: 32,
-  },
-  bannerContainer: {
-    alignItems: 'center',
-    width: '100%',
-    minHeight: 50,
-    marginVertical: 4,
   },
   exitOverlay: {
     flex: 1,
