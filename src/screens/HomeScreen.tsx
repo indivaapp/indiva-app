@@ -372,7 +372,12 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
             <InfluencerStoriesBar
               stories={influencerStories}
               loading={storiesLoading}
-              onPress={story => navigation.navigate('InfluencerStoryDetail', { story })}
+              onPress={story =>
+                navigation.navigate('InfluencerStoryDetail', {
+                  stories: influencerStories,
+                  initialIndex: influencerStories.indexOf(story),
+                })
+              }
             />
           }
           onEndReached={loadMore}

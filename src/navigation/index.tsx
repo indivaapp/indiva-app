@@ -33,7 +33,7 @@ export type RootStackParamList = {
   ProfileTerms: undefined;
   AffiliateForm: undefined;
   AdvertiseForm: undefined;
-  InfluencerStoryDetail: { story: InfluencerStory };
+  InfluencerStoryDetail: { stories: InfluencerStory[]; initialIndex: number };
 };
 
 export type TabParamList = {
