@@ -40,7 +40,7 @@ function NativeAdCardInner({ style }: { style?: StyleProp<ViewStyle> }) {
 
   console.log('[NativeAdCard] isLoaded:', isLoaded, 'loadFailed:', loadFailed, 'nativeAd:', !!nativeAd);
 
-  if (loadFailed) return null;
+  if (loadFailed) return <View style={{ flex: 1 }} />;
 
   if (!isLoaded || !nativeAd) {
     return (

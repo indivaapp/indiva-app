@@ -45,6 +45,9 @@ function AppContent() {
 
   useEffect(() => {
     // Load caches, then hide splash
+    MobileAds().setRequestConfiguration({
+      testDeviceIdentifiers: ['EMULATOR'],
+    });
     Promise.all([loadVotesCache(), loadNotificationsCache(), MobileAds().initialize()]).finally(() => {
       setNotificationCount(getNotificationCount());
       setTimeout(() => {
