@@ -17,11 +17,12 @@ import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
-import { fetchDiscounts, getOfflineCache } from '../services/firebaseService';
+import { fetchDiscounts, getOfflineCache, fetchInfluencerStories } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Discount } from '../types';
+import type { Discount, InfluencerStory } from '../types';
 import DiscountCard from '../components/DiscountCard';
+import InfluencerStoriesBar from '../components/InfluencerStoriesBar';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import { CATEGORIES, normalizeCategory } from '../constants/categories';
@@ -72,6 +73,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [error, setError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [influencerStories, setInfluencerStories] = useState<InfluencerStory[]>([]);
+  const [storiesLoading, setStoriesLoading] = useState(true);
   const isLoadingRef = useRef(false);
   const flatListRef = useRef<any>(null);
   useScrollToTop(flatListRef);
@@ -81,6 +84,10 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   useEffect(() => {
     loadVotesCache().then(() => setVotes(getVotes()));
     loadInitial();
+    fetchInfluencerStories().then(stories => {
+      setInfluencerStories(stories);
+      setStoriesLoading(false);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -144,10 +151,14 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     try {
       await loadVotesCache();
       setVotes(getVotes());
-      const result = await fetchDiscounts(null);
+      const [result, stories] = await Promise.all([
+        fetchDiscounts(null),
+        fetchInfluencerStories(),
+      ]);
       setDiscounts(result.discounts);
       setLastVisible(result.lastVisible);
       setHasMore(result.hasMore);
+      setInfluencerStories(stories);
       setIsOffline(false);
     } catch {
       setError('Yenilenirken hata oluştu.');
@@ -357,6 +368,13 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
           }
           renderItem={renderItem}
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
+          ListHeaderComponent={
+            <InfluencerStoriesBar
+              stories={influencerStories}
+              loading={storiesLoading}
+              onPress={story => navigation.navigate('InfluencerStoryDetail', { story })}
+            />
+          }
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           refreshControl={
@@ -498,7 +516,7 @@ const styles = StyleSheet.create({
     borderLeftColor: Colors.red500,
   },
   retryBtn: { marginTop: 8 },
-  listContainer: { padding: 8 },
+  listContainer: { padding: 8, paddingTop: 0 },
   row: {
     flexDirection: 'row',
     gap: 8,

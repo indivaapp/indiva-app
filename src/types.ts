@@ -54,6 +54,21 @@ export interface PendingDiscount {
   status: 'pending';
 }
 
+export interface InfluencerStory {
+  id: string;
+  influencerName: string;
+  influencerHandle: string;
+  influencerAvatar: string;
+  productTitle: string;
+  productImage: string;
+  productBrand: string;
+  affiliateLink: string;
+  category: string;
+  isActive: boolean;
+  expiresAt?: FirebaseFirestoreTypes.Timestamp;
+  createdAt: FirebaseFirestoreTypes.Timestamp;
+}
+
 export interface AdRequest {
   id?: string;
   type: 'product' | 'store';

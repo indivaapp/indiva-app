@@ -14,7 +14,7 @@ import {
 } from '@react-native-firebase/firestore';
 import type { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Discount, Brochure, PendingDiscount, AdRequest } from '../types';
+import type { Discount, Brochure, PendingDiscount, AdRequest, InfluencerStory } from '../types';
 
 const ITEMS_PER_PAGE = 4;
 const OFFLINE_CACHE_KEY = 'indiva_offline_discounts';
@@ -179,6 +179,26 @@ export async function fetchBrochuresByStore(storeName: string): Promise<Brochure
     }
   });
   return brochures;
+}
+
+export async function fetchInfluencerStories(): Promise<InfluencerStory[]> {
+  try {
+    const col = collection(db, 'influencerStories');
+    const q = query(col, where('isActive', '==', true), orderBy('createdAt', 'desc'));
+    const snap = await withTimeout(getDocs(q), 10000, 'Influencer hikayeleri');
+    const now = Date.now();
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as InfluencerStory))
+      .filter(s => {
+        if (!s.expiresAt) return true;
+        const expMs = typeof (s.expiresAt as any).toMillis === 'function'
+          ? (s.expiresAt as any).toMillis()
+          : new Date(s.expiresAt as any).getTime();
+        return now < expMs;
+      });
+  } catch {
+    return [];
+  }
 }
 
 export async function submitPendingDiscount(
