@@ -10,7 +10,7 @@ import { getDiscountById } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, Votes, loadVotesCache } from '../services/voteService';
 import type { Discount } from '../types';
 import DiscountCard from '../components/DiscountCard';
-import NativeAdCard, { nativeAdSupported } from '../components/NativeAdCard';
+import NativeAdCard from '../components/NativeAdCard';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
