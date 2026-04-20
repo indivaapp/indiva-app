@@ -16,15 +16,13 @@ import {
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import NativeAdCard, { nativeAdSupported } from '../components/NativeAdCard';
-import { fetchDiscounts, fetchDiscountsByCategory, getOfflineCache } from '../services/firebaseService';
-import { fetchInfluencerPosts, getSeenPostIds } from '../services/influencerService';
+import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
+import { fetchDiscounts, getOfflineCache, fetchInfluencerStories } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Discount, InfluencerPost } from '../types';
+import type { Discount, InfluencerStory } from '../types';
 import DiscountCard from '../components/DiscountCard';
-import InfluencerStoriesStrip from '../components/InfluencerStoriesStrip';
-import InfluencerMiniCard from '../components/InfluencerMiniCard';
+import InfluencerStoriesBar from '../components/InfluencerStoriesBar';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import { CATEGORIES, normalizeCategory } from '../constants/categories';
@@ -33,6 +31,9 @@ import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
+const BANNER_AD_UNIT_ID = __DEV__
+  ? 'ca-app-pub-3940256099942544/6300978111'
+  : 'ca-app-pub-3675503435035155/8261572668';
 
 interface HomeScreenProps {
   notificationCount: number;
@@ -63,7 +64,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Tümü');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastVisible, setLastVisible] = useState<FirebaseFirestoreTypes.QueryDocumentSnapshot | null>(null);
   const [hasMore, setHasMore] = useState(true);
@@ -71,65 +72,39 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [votes, setVotes] = useState<Votes>({});
   const [error, setError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
-  const [categoryDiscounts, setCategoryDiscounts] = useState<Discount[]>([]);
-  const [isCategoryLoading, setIsCategoryLoading] = useState(false);
-  const [categoryLastVisible, setCategoryLastVisible] = useState<FirebaseFirestoreTypes.QueryDocumentSnapshot | null>(null);
-  const [categoryHasMore, setCategoryHasMore] = useState(false);
-  const [isCategoryLoadingMore, setIsCategoryLoadingMore] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
-  const [influencerPosts, setInfluencerPosts] = useState<InfluencerPost[]>([]);
-  const [seenPostIds, setSeenPostIds] = useState<string[]>([]);
+  const [influencerStories, setInfluencerStories] = useState<InfluencerStory[]>([]);
+  const [storiesLoading, setStoriesLoading] = useState(true);
+  const [viewedStoryIds, setViewedStoryIds] = useState<string[]>([]);
   const isLoadingRef = useRef(false);
   const flatListRef = useRef<any>(null);
   useScrollToTop(flatListRef);
 
-  const allCategories = useMemo(() => {
-    if (discounts.length === 0) return ['Tümü', ...CATEGORIES];
-    const counts: Record<string, number> = {};
-    for (const d of discounts) {
-      const cat = normalizeCategory(d.category);
-      if (cat) counts[cat] = (counts[cat] ?? 0) + 1;
-    }
-    const sorted = CATEGORIES.slice().sort((a, b) => (counts[b] ?? 0) - (counts[a] ?? 0));
-    return ['Tümü', ...sorted];
-  }, [discounts]);
+  const allCategories = ['Tümü', ...CATEGORIES];
 
   useEffect(() => {
     loadVotesCache().then(() => setVotes(getVotes()));
     loadInitial();
+    fetchInfluencerStories().then(stories => {
+      setInfluencerStories(stories);
+      setStoriesLoading(false);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useFocusEffect(useCallback(() => {
     const onBack = () => { setShowExitModal(true); return true; };
-    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
-    return () => sub.remove();
+    BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => BackHandler.removeEventListener('hardwareBackPress', onBack);
   }, []));
 
   // Sekme odağa geldiğinde favorileri ve görülmüş story ID'lerini yenile
   useFocusEffect(useCallback(() => {
     getFavoriteIds().then(setFavorites);
-    getSeenPostIds().then(setSeenPostIds);
+    AsyncStorage.getItem('indiva_viewed_influencer_stories')
+      .then(v => setViewedStoryIds(v ? JSON.parse(v) : []))
+      .catch(() => {});
   }, []));
-
-  useEffect(() => {
-    if (selectedCategory === 'Tümü') {
-      setCategoryDiscounts([]);
-      setCategoryLastVisible(null);
-      setCategoryHasMore(false);
-      return;
-    }
-    setIsCategoryLoading(true);
-    setCategoryDiscounts([]);
-    setCategoryLastVisible(null);
-    fetchDiscountsByCategory(selectedCategory, null)
-      .then(result => {
-        setCategoryDiscounts(result.discounts);
-        setCategoryLastVisible(result.lastVisible);
-        setCategoryHasMore(result.hasMore);
-      })
-      .finally(() => setIsCategoryLoading(false));
-  }, [selectedCategory]);
 
   const loadInitial = async () => {
     if (isLoadingRef.current) return;
@@ -137,16 +112,10 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     setIsLoading(true);
     setError(null);
     try {
-      const [result, infPosts, seenIds] = await Promise.all([
-        fetchDiscounts(null),
-        fetchInfluencerPosts(),
-        getSeenPostIds(),
-      ]);
+      const result = await fetchDiscounts(null);
       setDiscounts(result.discounts);
       setLastVisible(result.lastVisible);
       setHasMore(result.hasMore);
-      setInfluencerPosts(infPosts);
-      setSeenPostIds(seenIds);
     } catch {
       const cached = await getOfflineCache();
       if (cached.length > 0) {
@@ -180,33 +149,20 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     }
   }, [hasMore, lastVisible, searchTerm, selectedCategory]);
 
-  const loadMoreCategory = useCallback(async () => {
-    if (isLoadingRef.current || !categoryHasMore || isCategoryLoadingMore) return;
-    isLoadingRef.current = true;
-    setIsCategoryLoadingMore(true);
-    try {
-      const result = await fetchDiscountsByCategory(selectedCategory, categoryLastVisible);
-      if (result.discounts.length > 0) {
-        setCategoryDiscounts(prev => [...prev, ...result.discounts]);
-      }
-      setCategoryLastVisible(result.lastVisible);
-      setCategoryHasMore(result.hasMore);
-    } finally {
-      setIsCategoryLoadingMore(false);
-      isLoadingRef.current = false;
-    }
-  }, [categoryHasMore, categoryLastVisible, isCategoryLoadingMore, selectedCategory]);
-
   const onRefresh = useCallback(async () => {
     setIsRefreshing(true);
     setError(null);
     try {
       await loadVotesCache();
       setVotes(getVotes());
-      const result = await fetchDiscounts(null);
+      const [result, stories] = await Promise.all([
+        fetchDiscounts(null),
+        fetchInfluencerStories(),
+      ]);
       setDiscounts(result.discounts);
       setLastVisible(result.lastVisible);
       setHasMore(result.hasMore);
+      setInfluencerStories(stories);
       setIsOffline(false);
     } catch {
       setError('Yenilenirken hata oluştu.');
@@ -222,86 +178,81 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
 
   const filteredDiscounts = useMemo(() => {
     const lower = searchTerm.toLowerCase();
-    const source = selectedCategory === 'Tümü' ? discounts : categoryDiscounts;
-    return source.filter(item => {
+    return discounts.filter(item => {
       if (isHiddenFromFeed(item.id)) return false;
-      if (!lower) return true;
-      return (
+      const matchSearch =
+        !lower ||
         item.title.toLowerCase().includes(lower) ||
         item.brand.toLowerCase().includes(lower) ||
-        item.category.toLowerCase().includes(lower)
-      );
+        item.category.toLowerCase().includes(lower);
+      const matchCat =
+        selectedCategory === 'Tümü' || normalizeCategory(item.category) === selectedCategory;
+      return matchSearch && matchCat;
     });
-  }, [discounts, categoryDiscounts, searchTerm, selectedCategory, votes]);
+  }, [discounts, searchTerm, selectedCategory, votes]);
 
-  type HomeSlot =
-    | { kind: 'discount'; item: Discount }
-    | { kind: 'ad'; adKey: string }
-    | { kind: 'influencer'; item: InfluencerPost };
-
-  type HomeRow = { rowKey: string; left: HomeSlot; right: HomeSlot | null };
+  type HomeRow =
+    | { type: 'pair'; left: Discount; right: Discount | null; pairIndex: number }
+    | { type: 'banner'; key: string };
 
   const listItems = useMemo<HomeRow[]>(() => {
-    const slots: HomeSlot[] = [];
-    let adCount = 0;
-    let infIdx = 0;
-    let discountSinceLastInf = 0;
-
-    for (let i = 0; i < filteredDiscounts.length; i++) {
-      slots.push({ kind: 'discount', item: filteredDiscounts[i] });
-      discountSinceLastInf++;
-      if ((i + 1) % 4 === 0) {
-        adCount++;
-        slots.push({ kind: 'ad', adKey: `ad-${adCount}` });
-      }
-      if (discountSinceLastInf === 6 && infIdx < influencerPosts.length) {
-        slots.push({ kind: 'influencer', item: influencerPosts[infIdx++] });
-        discountSinceLastInf = 0;
-      }
-    }
-
     const rows: HomeRow[] = [];
-    for (let i = 0; i < slots.length; i += 2) {
-      rows.push({ rowKey: `row-${i}`, left: slots[i], right: slots[i + 1] ?? null });
+    for (let i = 0; i < filteredDiscounts.length; i += 2) {
+      rows.push({
+        type: 'pair',
+        left: filteredDiscounts[i],
+        right: filteredDiscounts[i + 1] ?? null,
+        pairIndex: i,
+      });
+      // Her 3 çiftten (6 ilanından) sonra banner ekle
+      const pairIndex = rows.filter(r => r.type === 'pair').length;
+      if (pairIndex % 3 === 0) {
+        rows.push({ type: 'banner', key: `banner-${i}` });
+      }
     }
     return rows;
-  }, [filteredDiscounts, influencerPosts]);
+  }, [filteredDiscounts]);
 
-  const renderSlot = (slot: HomeSlot | null) => {
-    if (!slot) return <View style={styles.cardWrapper} />;
-    if (slot.kind === 'ad') {
+  const renderItem = ({ item }: { item: HomeRow }) => {
+    if (item.type === 'banner') {
       return (
-        <View style={styles.cardWrapper}>
-          <NativeAdCard />
+        <View style={styles.bannerContainer}>
+          <BannerAd
+            unitId={BANNER_AD_UNIT_ID}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          />
         </View>
       );
     }
-    if (slot.kind === 'influencer') {
-      return (
-        <View style={styles.cardWrapper}>
-          <InfluencerMiniCard post={slot.item} />
-        </View>
-      );
-    }
+
     return (
-      <View style={styles.cardWrapper}>
-        <DiscountCard
-          discount={slot.item}
-          isFavorite={favorites.includes(slot.item.id)}
-          onToggleFavorite={() => handleToggleFavorite(slot.item.id)}
-          isExpired={isDiscountExpired(slot.item.id, votes)}
-          discountList={filteredDiscounts}
-        />
+      <View style={styles.row}>
+        <View style={styles.cardWrapper}>
+          <DiscountCard
+            discount={item.left}
+            isFavorite={favorites.includes(item.left.id)}
+            onToggleFavorite={() => handleToggleFavorite(item.left.id)}
+            isExpired={isDiscountExpired(item.left.id, votes)}
+            discountList={filteredDiscounts}
+          />
+        </View>
+        <View style={styles.cardWrapper}>
+          {item.right ? (
+            <DiscountCard
+              discount={item.right}
+              isFavorite={favorites.includes(item.right.id)}
+              onToggleFavorite={() => handleToggleFavorite(item.right!.id)}
+              isExpired={isDiscountExpired(item.right.id, votes)}
+              discountList={filteredDiscounts}
+            />
+          ) : (
+            <View style={styles.cardWrapper} />
+          )}
+        </View>
       </View>
     );
   };
-
-  const renderItem = ({ item }: { item: HomeRow }) => (
-    <View style={styles.row}>
-      {renderSlot(item.left)}
-      {renderSlot(item.right)}
-    </View>
-  );
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const headerBg = isDark ? Colors.gray800 : Colors.white;
@@ -396,7 +347,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       )}
 
       {/* Initial skeleton loader */}
-      {(isLoading && discounts.length === 0 || isCategoryLoading) && !error && (
+      {isLoading && discounts.length === 0 && !error && (
         <View style={styles.skeletonGrid}>
           {[0, 1, 2, 3].map(i => (
             <View key={i} style={[styles.skeletonCard, { backgroundColor: isDark ? Colors.gray800 : Colors.gray200 }]} />
@@ -405,7 +356,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       )}
 
       {/* Discount list */}
-      {filteredDiscounts.length === 0 && !isLoading && !isCategoryLoading && !error ? (
+      {filteredDiscounts.length === 0 && !isLoading && !error ? (
         <View style={styles.emptyContainer}>
           <Text style={{ fontSize: 40, marginBottom: 12 }}>😕</Text>
           <Text style={{ color: isDark ? Colors.gray300 : Colors.gray600, fontSize: 16, fontWeight: '700' }}>
@@ -416,19 +367,25 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         <FlatList
           ref={flatListRef}
           data={listItems}
-          keyExtractor={(item) => item.rowKey}
+          keyExtractor={(item, index) =>
+            item.type === 'pair' ? `pair_${item.pairIndex}_${index}` : item.key
+          }
           renderItem={renderItem}
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
           ListHeaderComponent={
-            <InfluencerStoriesStrip
-              posts={influencerPosts}
-              seenIds={seenPostIds}
-              onStoryPress={(index) =>
-                navigation.navigate('InfluencerStories', { posts: influencerPosts, initialIndex: index })
+            <InfluencerStoriesBar
+              stories={influencerStories}
+              loading={storiesLoading}
+              viewedIds={viewedStoryIds}
+              onPress={story =>
+                navigation.navigate('InfluencerStoryDetail', {
+                  stories: influencerStories,
+                  initialIndex: influencerStories.indexOf(story),
+                })
               }
             />
           }
-          onEndReached={selectedCategory === 'Tümü' ? loadMore : loadMoreCategory}
+          onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           refreshControl={
             <RefreshControl
@@ -439,9 +396,9 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
             />
           }
           ListFooterComponent={
-            (isLoading && discounts.length > 0) || isCategoryLoadingMore ? (
+            isLoading && discounts.length > 0 ? (
               <ActivityIndicator color={Colors.orange} style={{ marginVertical: 20 }} />
-            ) : selectedCategory === 'Tümü' && !hasMore && discounts.length > 0 ? (
+            ) : !hasMore && discounts.length > 0 ? (
               <View style={styles.allDoneContainer}>
                 <Text style={{ fontSize: 36 }}>🎉</Text>
                 <Text style={{ color: isDark ? Colors.gray200 : Colors.gray700, fontWeight: '800', marginTop: 8 }}>
@@ -449,16 +406,6 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
                 </Text>
                 <Text style={{ color: Colors.gray400, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
                   Tüm fırsatları gördünüz.{'\n'}Yeni indirimler için takipte kalın.
-                </Text>
-              </View>
-            ) : selectedCategory !== 'Tümü' && !categoryHasMore && categoryDiscounts.length > 0 ? (
-              <View style={styles.allDoneContainer}>
-                <Text style={{ fontSize: 36 }}>🎉</Text>
-                <Text style={{ color: isDark ? Colors.gray200 : Colors.gray700, fontWeight: '800', marginTop: 8 }}>
-                  Hepsi bu!
-                </Text>
-                <Text style={{ color: Colors.gray400, fontSize: 13, marginTop: 4, textAlign: 'center' }}>
-                  Bu kategorideki tüm fırsatları gördünüz.
                 </Text>
               </View>
             ) : null
@@ -513,14 +460,13 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     gap: 10,
   },
   logo: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '900',
-    fontFamily: 'PlayfairDisplay-VariableFont_wght',
     letterSpacing: 2,
     flexShrink: 0,
   },
@@ -558,14 +504,14 @@ const styles = StyleSheet.create({
   },
   searchIcon: { fontSize: 15 },
   searchInput: { flex: 1, fontSize: 14, padding: 0 },
-  categoriesScroll: { marginBottom: 10 },
-  categoriesContent: { paddingHorizontal: 14, gap: 8 },
+  categoriesScroll: { marginBottom: 8 },
+  categoriesContent: { paddingHorizontal: 12, gap: 8 },
   catChip: {
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderRadius: 22,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  catText: { fontSize: 13, fontWeight: '700' },
+  catText: { fontSize: 12, fontWeight: '600' },
   offlineBanner: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -580,7 +526,7 @@ const styles = StyleSheet.create({
     borderLeftColor: Colors.red500,
   },
   retryBtn: { marginTop: 8 },
-  listContainer: { padding: 8 },
+  listContainer: { padding: 8, paddingTop: 0 },
   row: {
     flexDirection: 'row',
     gap: 8,
@@ -607,6 +553,12 @@ const styles = StyleSheet.create({
   allDoneContainer: {
     alignItems: 'center',
     paddingVertical: 32,
+  },
+  bannerContainer: {
+    alignItems: 'center',
+    width: '100%',
+    minHeight: 50,
+    marginVertical: 4,
   },
   exitOverlay: {
     flex: 1,
