@@ -164,8 +164,8 @@ export default function RootNavigator({ notificationCount }: Props) {
       <Stack.Screen name="ProfileHelp" component={ProfileHelpScreen} options={{ title: 'Yardım & Destek' }} />
       <Stack.Screen name="ProfilePrivacy" component={ProfilePrivacyScreen} options={{ title: 'Gizlilik Politikası' }} />
       <Stack.Screen name="ProfileTerms" component={ProfileTermsScreen} options={{ title: 'Kullanım Şartları' }} />
-      <Stack.Screen name="AffiliateForm" component={AffiliateFormScreen} options={{ title: 'İndirim Paylaş' }} />
-      <Stack.Screen name="AdvertiseForm" component={AdvertiseFormScreen} options={{ title: 'İşbirliği Başvurusu' }} />
+      <Stack.Screen name="AffiliateForm" component={AffiliateFormScreen} options={{ title: 'İndirim Paylaş', headerTitleAlign: 'center' }} />
+      <Stack.Screen name="AdvertiseForm" component={AdvertiseFormScreen} options={{ title: 'İşbirliği Başvurusu', headerTitleAlign: 'center' }} />
       <Stack.Screen name="InfluencerStoryDetail" component={InfluencerStoryDetailScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
