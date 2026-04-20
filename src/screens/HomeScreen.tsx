@@ -16,7 +16,7 @@ import {
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchDiscounts, getOfflineCache, fetchInfluencerStories } from '../services/firebaseService';
+import { fetchDiscounts, fetchDiscountsByCategory, fetchCategoryCounts, getOfflineCache, fetchInfluencerStories } from '../services/firebaseService';
 import NativeAdCard from '../components/NativeAdCard';
 import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,7 +25,6 @@ import DiscountCard from '../components/DiscountCard';
 import InfluencerStoriesBar from '../components/InfluencerStoriesBar';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
-import { CATEGORIES, normalizeCategory } from '../constants/categories';
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import type { RootStackParamList } from '../navigation';
 
@@ -72,6 +71,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [influencerStories, setInfluencerStories] = useState<InfluencerStory[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(true);
   const [viewedStoryIds, setViewedStoryIds] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>(['Tümü']);
   const isLoadingRef = useRef(false);
   const flatListRef = useRef<any>(null);
   useScrollToTop(flatListRef);
@@ -80,14 +80,17 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, []));
 
-  const allCategories = ['Tümü', ...CATEGORIES];
-
   useEffect(() => {
     loadVotesCache().then(() => setVotes(getVotes()));
     loadInitial();
     fetchInfluencerStories().then(stories => {
       setInfluencerStories(stories);
       setStoriesLoading(false);
+    });
+    fetchCategoryCounts().then(counts => {
+      if (counts.length > 0) {
+        setCategories(['Tümü', ...counts.map(c => c.category)]);
+      }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -131,16 +134,25 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   };
 
   const loadMore = useCallback(async () => {
-    if (isLoadingRef.current || !hasMore || searchTerm || selectedCategory !== 'Tümü') return;
+    if (isLoadingRef.current || !hasMore || searchTerm) return;
     isLoadingRef.current = true;
     setIsLoading(true);
     try {
-      const result = await fetchDiscounts(lastVisible);
-      if (result.discounts.length > 0) {
-        setDiscounts(prev => [...prev, ...result.discounts]);
-        setLastVisible(result.lastVisible);
+      if (selectedCategory === 'Tümü') {
+        const result = await fetchDiscounts(lastVisible);
+        if (result.discounts.length > 0) {
+          setDiscounts(prev => [...prev, ...result.discounts]);
+          setLastVisible(result.lastVisible);
+        }
+        setHasMore(result.hasMore);
+      } else {
+        const result = await fetchDiscountsByCategory(selectedCategory, lastVisible);
+        if (result.discounts.length > 0) {
+          setDiscounts(prev => [...prev, ...result.discounts]);
+          setLastVisible(result.lastVisible);
+        }
+        setHasMore(result.hasMore);
       }
-      setHasMore(result.hasMore);
     } catch {
       setError('Daha fazla yüklenemedi.');
     } finally {
@@ -176,20 +188,37 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     setFavorites(next);
   }, []);
 
+  // Kategori değişince veriyi sıfırla ve yeni kategoriyi yükle
+  useEffect(() => {
+    if (selectedCategory === 'Tümü') {
+      loadInitial();
+    } else {
+      setDiscounts([]);
+      setLastVisible(null);
+      setHasMore(true);
+      setError(null);
+      setIsLoading(true);
+      fetchDiscountsByCategory(selectedCategory, null).then(result => {
+        setDiscounts(result.discounts);
+        setLastVisible(result.lastVisible);
+        setHasMore(result.hasMore);
+      }).catch(() => setError('Kategori yüklenemedi.')).finally(() => setIsLoading(false));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory]);
+
   const filteredDiscounts = useMemo(() => {
     const lower = searchTerm.toLowerCase();
     return discounts.filter(item => {
       if (isHiddenFromFeed(item.id)) return false;
-      const matchSearch =
-        !lower ||
+      if (!lower) return true;
+      return (
         item.title.toLowerCase().includes(lower) ||
         item.brand.toLowerCase().includes(lower) ||
-        item.category.toLowerCase().includes(lower);
-      const matchCat =
-        selectedCategory === 'Tümü' || normalizeCategory(item.category) === selectedCategory;
-      return matchSearch && matchCat;
+        item.category.toLowerCase().includes(lower)
+      );
     });
-  }, [discounts, searchTerm, selectedCategory, votes]);
+  }, [discounts, searchTerm, votes]);
 
   type HomeSlot = { kind: 'discount'; item: Discount } | { kind: 'ad'; adKey: string };
   type HomeRow = { rowKey: string; left: HomeSlot; right: HomeSlot | null };
@@ -288,7 +317,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
           contentContainerStyle={styles.categoriesContent}
           style={styles.categoriesScroll}
         >
-          {allCategories.map(cat => (
+          {categories.map(cat => (
             <TouchableOpacity
               key={cat}
               onPress={() => setSelectedCategory(cat)}
