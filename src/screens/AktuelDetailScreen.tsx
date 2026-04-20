@@ -220,24 +220,10 @@ export default function AktuelDetailScreen({ route }: Props) {
   });
   listData.push({ type: 'footer' });
 
-  const STORE_LOGOS: Record<string, any> = {
-    bim: require('../assets/logos/bim.png'),
-    a101: require('../assets/logos/a101.png'),
-    sok: require('../assets/logos/sok.png'),
-  };
-  const storeLogo = STORE_LOGOS[storeName.toLowerCase()];
-
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       <FlatList
         data={listData}
-        ListHeaderComponent={
-          storeLogo ? (
-            <View style={[styles.storeHeader, { backgroundColor: cardBg }]}>
-              <Image source={storeLogo} style={styles.storeLogoImg} resizeMode="contain" />
-            </View>
-          ) : null
-        }
         keyExtractor={item =>
           item.type === 'brochure'
             ? item.data.id
@@ -428,8 +414,6 @@ const styles = StyleSheet.create({
   brochureImageContainer: { aspectRatio: 3 / 4, width: '100%', backgroundColor: Colors.gray100 },
   brochureInfo: { padding: 12, gap: 4 },
   brochureTitle: { fontSize: 14, fontWeight: '700' },
-  storeHeader: { alignItems: 'center', justifyContent: 'center', paddingVertical: 16, marginBottom: 4, borderRadius: 12 },
-  storeLogoImg: { width: 140, height: 56 },
   bannerWrapper: { alignItems: 'center', marginVertical: 4 },
   nativeAdWrapper: { marginHorizontal: 8, marginVertical: 6 },
   lightboxBg: {
