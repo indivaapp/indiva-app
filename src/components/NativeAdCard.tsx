@@ -4,9 +4,7 @@ import { useNativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-a
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 
-const NATIVE_AD_UNIT_ID = __DEV__
-  ? TestIds.NATIVE
-  : 'ca-app-pub-3675503435035155/8909740660';
+const NATIVE_AD_UNIT_ID = 'ca-app-pub-3675503435035155/8909740660';
 
 export const nativeAdSupported = typeof useNativeAd === 'function';
 
