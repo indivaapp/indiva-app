@@ -195,8 +195,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     let adCount = 0;
     for (let i = 0; i < filteredDiscounts.length; i++) {
       slots.push({ kind: 'discount', item: filteredDiscounts[i] });
-      // Her 5 indirim kartından sonra 1 native reklam slotu ekle
-      if ((i + 1) % 5 === 0) {
+      // Her 4 indirim kartından sonra 1 native reklam slotu ekle (5. pozisyon)
+      if ((i + 1) % 4 === 0) {
         slots.push({ kind: 'ad', adKey: `ad-${adCount++}` });
       }
     }

@@ -315,9 +315,9 @@ export default function ProfileScreen() {
             ))}
           </View>
 
-          <Text style={{ textAlign: 'center', color: Colors.gray400, fontSize: 12, marginTop: 8 }}>İNDİVA v1.2.0</Text>
-
           <NativeAdCard style={{ alignSelf: 'stretch', marginTop: 8 }} />
+
+          <Text style={{ textAlign: 'center', color: Colors.gray400, fontSize: 12, marginTop: 8 }}>İNDİVA v1.2.0</Text>
         </View>
       </ScrollView>
 

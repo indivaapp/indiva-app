@@ -1,15 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
 import { submitAdRequest } from '../services/firebaseService';
 import { CATEGORIES } from '../constants/categories';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
+
+const INTERSTITIAL_AD_UNIT_ID = __DEV__
+  ? TestIds.INTERSTITIAL
+  : 'ca-app-pub-3675503435035155/1880723761';
+
+const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
+  requestNonPersonalizedAdsOnly: true,
+});
 
 const CATEGORIES_WITH_OTHER = [...CATEGORIES, 'Diğer'];
 type AdType = 'product' | 'store' | null;
@@ -31,12 +40,38 @@ export default function AdvertiseFormScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
+  const pendingSubmit = useRef(false);
+
+  useEffect(() => {
+    const unsub = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
+      interstitial.load();
+      if (pendingSubmit.current) {
+        pendingSubmit.current = false;
+        doSubmit();
+      }
+    });
+    interstitial.load();
+    return unsub;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
   const inputBg = isDark ? Colors.gray700 : Colors.gray50;
   const inputBorder = isDark ? Colors.gray600 : Colors.gray300;
   const textColor = isDark ? Colors.white : Colors.gray900;
+
+  const doSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      await submitAdRequest({ type: adType!, companyName, contactPerson, email, url, category, discountCode, message });
+      setIsSuccess(true);
+    } catch {
+      Alert.alert('Hata', 'Başvuru gönderilirken bir hata oluştu.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!companyName || !contactPerson || !email || !url || !category || !adType) {
@@ -47,14 +82,14 @@ export default function AdvertiseFormScreen() {
       Alert.alert('Hata', 'Lütfen geçerli bir e-posta girin.');
       return;
     }
-    setIsSubmitting(true);
-    try {
-      await submitAdRequest({ type: adType, companyName, contactPerson, email, url, category, discountCode, message });
-      setIsSuccess(true);
-    } catch {
-      Alert.alert('Hata', 'Başvuru gönderilirken bir hata oluştu.');
-    } finally {
-      setIsSubmitting(false);
+    if (interstitial.loaded) {
+      pendingSubmit.current = true;
+      interstitial.show().catch(() => {
+        pendingSubmit.current = false;
+        doSubmit();
+      });
+    } else {
+      doSubmit();
     }
   };
 
