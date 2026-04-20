@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
 import OptimizedImage from '../components/OptimizedImage';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
@@ -23,9 +24,18 @@ import type { InfluencerStory } from '../types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'InfluencerStoryDetail'>;
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+const { width: SCREEN_W } = Dimensions.get('window');
 const AUTO_ADVANCE_MS = 10000;
 const SWIPE_THRESHOLD = 50;
+const AD_EVERY_N = 5;
+
+const INTERSTITIAL_AD_UNIT_ID = __DEV__
+  ? TestIds.INTERSTITIAL
+  : 'ca-app-pub-3675503435035155/8261572668';
+
+const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
+  requestNonPersonalizedAdsOnly: true,
+});
 
 function AvatarCircle({ uri, name }: { uri: string; name: string }) {
   const [err, setErr] = useState(false);
@@ -61,6 +71,31 @@ export default function InfluencerStoryDetailScreen({ route }: Props) {
   // Slide transition
   const slideX = useRef(new Animated.Value(0)).current;
 
+  // Interstitial ad
+  const navCountRef = useRef(0);
+  const adReadyRef = useRef(false);
+  const pendingNavRef = useRef<{ nextIndex: number; direction: 'next' | 'prev' } | null>(null);
+
+  useEffect(() => {
+    interstitial.load();
+    const unsubLoaded = interstitial.addAdEventListener(AdEventType.LOADED, () => {
+      adReadyRef.current = true;
+    });
+    const unsubClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
+      adReadyRef.current = false;
+      interstitial.load();
+      const pending = pendingNavRef.current;
+      pendingNavRef.current = null;
+      if (pending) goTo(pending.nextIndex, pending.direction);
+    });
+    const unsubError = interstitial.addAdEventListener(AdEventType.ERROR, () => {
+      adReadyRef.current = false;
+      interstitial.load();
+    });
+    return () => { unsubLoaded(); unsubClosed(); unsubError(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const goTo = useCallback(
     (nextIndex: number, direction: 'next' | 'prev') => {
       if (nextIndex < 0 || nextIndex >= stories.length) {
@@ -70,6 +105,14 @@ export default function InfluencerStoryDetailScreen({ route }: Props) {
       // Stop current progress animation
       animRef.current?.stop();
       if (timerRef.current) clearTimeout(timerRef.current);
+
+      // Her AD_EVERY_N geçişte bir interstitial göster
+      navCountRef.current += 1;
+      if (navCountRef.current % AD_EVERY_N === 0 && adReadyRef.current) {
+        pendingNavRef.current = { nextIndex, direction };
+        interstitial.show();
+        return;
+      }
 
       // Slide out current, slide in next
       const outX = direction === 'next' ? -SCREEN_W * 0.3 : SCREEN_W * 0.3;
