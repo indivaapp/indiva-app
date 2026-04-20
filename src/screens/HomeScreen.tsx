@@ -521,11 +521,11 @@ const styles = StyleSheet.create({
   categoriesScroll: { marginBottom: 8 },
   categoriesContent: { paddingHorizontal: 12, gap: 8 },
   catChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
     borderRadius: 20,
   },
-  catText: { fontSize: 12, fontWeight: '600' },
+  catText: { fontSize: 14, fontWeight: '600' },
   offlineBanner: {
     paddingHorizontal: 16,
     paddingVertical: 8,
