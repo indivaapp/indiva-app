@@ -69,6 +69,18 @@ export interface InfluencerStory {
   createdAt: FirebaseFirestoreTypes.Timestamp;
 }
 
+export interface InfluencerPost {
+  id: string;
+  imageUrl: string;
+  platform: string;
+  influencerHandle: string;
+  brand: string;
+  title: string;
+  newPrice: number;
+  oldPrice?: number;
+  productLink?: string;
+}
+
 export interface AdRequest {
   id?: string;
   type: 'product' | 'store';

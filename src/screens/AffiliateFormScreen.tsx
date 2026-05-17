@@ -69,17 +69,26 @@ export default function AffiliateFormScreen() {
   const textColor = isDark ? Colors.white : Colors.gray900;
 
   const pickImage = async () => {
-    const result = await launchImageLibrary({
-      mediaType: 'photo',
-      maxWidth: 800,
-      maxHeight: 800,
-      quality: 1,
-      includeBase64: true,
-    });
-    if (result.assets && result.assets[0]) {
-      const asset = result.assets[0];
-      setImageUri(asset.uri ?? null);
-      setImageBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null);
+    try {
+      const result = await launchImageLibrary({
+        mediaType: 'photo',
+        maxWidth: 800,
+        maxHeight: 800,
+        quality: 1,
+        includeBase64: true,
+      });
+      if (result.didCancel) return;
+      if (result.errorCode) {
+        Alert.alert('Hata', result.errorMessage ?? 'Görsel seçilirken bir sorun oluştu.');
+        return;
+      }
+      if (result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        setImageUri(asset.uri ?? null);
+        setImageBase64(asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : null);
+      }
+    } catch {
+      Alert.alert('Hata', 'Görsel seçilirken beklenmeyen bir hata oluştu.');
     }
   };
 

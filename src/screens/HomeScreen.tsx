@@ -12,6 +12,7 @@ import {
   StatusBar,
   BackHandler,
   Modal,
+  Animated,
 } from 'react-native';
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -72,11 +73,42 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [influencerStories, setInfluencerStories] = useState<InfluencerStory[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(true);
   const [viewedStoryIds, setViewedStoryIds] = useState<string[]>([]);
+  const bellPulse = useRef(new Animated.Value(1)).current;
+  const bellPulseLoop = useRef<Animated.CompositeAnimation | null>(null);
   const isLoadingRef = useRef(false);
   const flatListRef = useRef<any>(null);
   useScrollToTop(flatListRef);
 
   const allCategories = ['Tümü', ...CATEGORIES];
+
+  // Pulse animation on bell icon when there are unread notifications
+  useEffect(() => {
+    if (notificationCount > 0) {
+      bellPulseLoop.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(bellPulse, { toValue: 1.18, duration: 380, useNativeDriver: true }),
+          Animated.timing(bellPulse, { toValue: 1, duration: 380, useNativeDriver: true }),
+        ]),
+      );
+      bellPulseLoop.current.start();
+    } else {
+      bellPulseLoop.current?.stop();
+      bellPulse.setValue(1);
+    }
+    return () => bellPulseLoop.current?.stop();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notificationCount]);
+
+  // Sort stories: unseen first, then seen
+  const sortedStories = useMemo(() => {
+    if (!influencerStories.length) return influencerStories;
+    return [...influencerStories].sort((a, b) => {
+      const aViewed = viewedStoryIds.includes(a.id);
+      const bViewed = viewedStoryIds.includes(b.id);
+      if (aViewed === bViewed) return 0;
+      return aViewed ? 1 : -1;
+    });
+  }, [influencerStories, viewedStoryIds]);
 
   useEffect(() => {
     loadVotesCache().then(() => setVotes(getVotes()));
@@ -265,17 +297,19 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
               </TouchableOpacity>
             )}
           </View>
-          <TouchableOpacity
-            style={[styles.bellBtn, { backgroundColor: inputBg }]}
-            onPress={() => navigation.navigate('Notifications')}
-          >
-            <Text style={styles.bellIcon}>🔔</Text>
-            {notificationCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{notificationCount > 9 ? '9+' : notificationCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: bellPulse }] }}>
+            <TouchableOpacity
+              style={[styles.bellBtn, { backgroundColor: inputBg }]}
+              onPress={() => navigation.navigate('Notifications')}
+            >
+              <Text style={styles.bellIcon}>🔔</Text>
+              {notificationCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{notificationCount > 9 ? '9+' : notificationCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
         </View>
         {/* Category filter */}
         <ScrollView
@@ -342,7 +376,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         <View style={styles.emptyContainer}>
           <Text style={{ fontSize: 40, marginBottom: 12 }}>😕</Text>
           <Text style={{ color: isDark ? Colors.gray300 : Colors.gray600, fontSize: 16, fontWeight: '700' }}>
-            {discounts.length > 0 ? 'Kriterlerinize uygun indirim yok.' : 'Şu an indirim bulunmuyor.'}
+            {filteredDiscounts.length === 0 && discounts.length > 0 ? 'Kriterlerinize uygun indirim yok.' : 'Şu an indirim bulunmuyor.'}
           </Text>
         </View>
       ) : (
@@ -355,13 +389,13 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
           ListHeaderComponent={
             <InfluencerStoriesBar
-              stories={influencerStories}
+              stories={sortedStories}
               loading={storiesLoading}
               viewedIds={viewedStoryIds}
               onPress={story =>
                 navigation.navigate('InfluencerStoryDetail', {
-                  stories: influencerStories,
-                  initialIndex: influencerStories.indexOf(story),
+                  stories: sortedStories,
+                  initialIndex: sortedStories.indexOf(story),
                 })
               }
             />

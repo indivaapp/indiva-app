@@ -199,6 +199,11 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
             <Text style={styles.adBadgeText}>{discount.adBadge || 'REKLAM'}</Text>
           </View>
         )}
+        {discountPercentage > 0 && !isAd && (
+          <View style={styles.discountPctBadge}>
+            <Text style={styles.discountPctText}>%{discountPercentage}</Text>
+          </View>
+        )}
         <OptimizedImage
           src={discount.imageUrl}
           alt={discount.title}
@@ -356,6 +361,21 @@ const styles = StyleSheet.create({
     color: Colors.yellow900,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  discountPctBadge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    backgroundColor: Colors.red500,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderBottomRightRadius: 8,
+    zIndex: 20,
+  },
+  discountPctText: {
+    color: Colors.white,
+    fontSize: 11,
+    fontWeight: '900',
   },
   timeBadge: {
     position: 'absolute',

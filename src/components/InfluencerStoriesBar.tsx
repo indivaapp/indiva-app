@@ -5,10 +5,10 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Image,
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
+import OptimizedImage from './OptimizedImage';
 import type { InfluencerStory } from '../types';
 
 interface Props {
@@ -19,10 +19,9 @@ interface Props {
 }
 
 function StoryAvatar({ uri, name }: { uri: string; name: string }) {
-  const [error, setError] = React.useState(false);
   const initials = name.trim().charAt(0).toUpperCase();
 
-  if (error || !uri) {
+  if (!uri) {
     return (
       <View style={styles.avatarFallback}>
         <Text style={styles.avatarFallbackText}>{initials}</Text>
@@ -31,10 +30,10 @@ function StoryAvatar({ uri, name }: { uri: string; name: string }) {
   }
 
   return (
-    <Image
-      source={{ uri }}
-      style={styles.avatarImage}
-      onError={() => setError(true)}
+    <OptimizedImage
+      src={uri}
+      containerStyle={styles.avatarImageContainer}
+      resizeMode="cover"
     />
   );
 }
@@ -67,32 +66,59 @@ export default function InfluencerStoriesBar({ stories, loading, viewedIds, onPr
               return (
                 <TouchableOpacity
                   key={story.id}
-                  style={styles.item}
+                  style={[styles.item, seen && styles.itemSeen]}
                   onPress={() => onPress(story)}
                   activeOpacity={0.75}
                 >
+                  {/* Outer glow ring — only visible when unseen */}
+                  {!seen && (
+                    <View style={styles.glowRing} />
+                  )}
+
                   <View
                     style={[
                       styles.avatarRing,
                       seen
-                        ? { borderColor: isDark ? Colors.gray600 : Colors.gray300, borderWidth: 1.5 }
-                        : { borderColor: Colors.orange, borderWidth: 2.5 },
+                        ? {
+                            borderColor: isDark ? Colors.gray600 : Colors.gray300,
+                            borderWidth: 1.5,
+                          }
+                        : {
+                            borderColor: Colors.orange,
+                            borderWidth: 2.5,
+                            shadowColor: Colors.orange,
+                            shadowOffset: { width: 0, height: 0 },
+                            shadowOpacity: 0.55,
+                            shadowRadius: 6,
+                            elevation: 5,
+                          },
                     ]}
                   >
                     <StoryAvatar uri={story.influencerAvatar} name={story.influencerName} />
                   </View>
+
                   <Text
                     style={[
                       styles.label,
-                      { color: seen
-                          ? (isDark ? Colors.gray500 : Colors.gray400)
-                          : (isDark ? Colors.gray300 : Colors.gray600),
+                      {
+                        color: seen
+                          ? isDark ? Colors.gray500 : Colors.gray400
+                          : isDark ? Colors.gray200 : Colors.gray700,
+                        fontWeight: seen ? '500' : '700',
                       },
                     ]}
                     numberOfLines={1}
                   >
                     {story.influencerName}
                   </Text>
+
+                  {/* Small dot indicator — orange if unseen */}
+                  <View
+                    style={[
+                      styles.statusDot,
+                      { backgroundColor: seen ? Colors.gray400 : Colors.orange },
+                    ]}
+                  />
                 </TouchableOpacity>
               );
             })}
@@ -106,7 +132,7 @@ const AVATAR_SIZE = 62;
 const styles = StyleSheet.create({
   container: {
     paddingTop: 10,
-    paddingBottom: 6,
+    paddingBottom: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.gray200,
   },
@@ -115,16 +141,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
     paddingHorizontal: 14,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   scrollContent: {
     paddingHorizontal: 10,
-    gap: 6,
+    gap: 8,
   },
   item: {
     alignItems: 'center',
-    width: 72,
+    width: 74,
     gap: 5,
+  },
+  itemSeen: {
+    opacity: 0.65,
+  },
+  // Subtle outer glow ring behind the avatar ring
+  glowRing: {
+    position: 'absolute',
+    width: AVATAR_SIZE + 14,
+    height: AVATAR_SIZE + 14,
+    borderRadius: (AVATAR_SIZE + 14) / 2,
+    backgroundColor: Colors.orange + '18',
+    top: -3,
   },
   avatarRing: {
     width: AVATAR_SIZE + 4,
@@ -136,10 +174,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 2,
   },
-  avatarImage: {
+  avatarImageContainer: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
     borderRadius: AVATAR_SIZE / 2,
+    overflow: 'hidden',
   },
   avatarFallback: {
     width: AVATAR_SIZE,
@@ -156,9 +195,14 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 10,
-    fontWeight: '600',
     textAlign: 'center',
-    width: 70,
+    width: 72,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    marginTop: -2,
   },
   skeletonRing: {
     width: AVATAR_SIZE + 4,

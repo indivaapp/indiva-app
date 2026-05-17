@@ -85,7 +85,9 @@ export default function ProfileScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
-    loadVotesCache().then(() => getContributionStats().then(refreshStats));
+    loadVotesCache()
+      .then(() => getContributionStats().then(refreshStats).catch(() => {}))
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
 
