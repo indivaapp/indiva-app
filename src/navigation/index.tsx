@@ -1,11 +1,11 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
-import type { Discount, InfluencerStory } from '../types';
+import type { Discount, InfluencerStory, InfluencerPost } from '../types';
 
 // Screens
 import HomeScreen from '../screens/HomeScreen';
@@ -22,6 +22,7 @@ import KazanScreen from '../screens/KazanScreen';
 import AffiliateFormScreen from '../screens/AffiliateFormScreen';
 import AdvertiseFormScreen from '../screens/AdvertiseFormScreen';
 import InfluencerStoryDetailScreen from '../screens/InfluencerStoryDetailScreen';
+import InfluencerStoriesScreen from '../screens/InfluencerStoriesScreen';
 
 export type RootStackParamList = {
   MainTabs: undefined;
@@ -34,6 +35,7 @@ export type RootStackParamList = {
   AffiliateForm: undefined;
   AdvertiseForm: undefined;
   InfluencerStoryDetail: { stories: InfluencerStory[]; initialIndex: number };
+  InfluencerStories: { posts: InfluencerPost[]; initialIndex: number };
 };
 
 export type TabParamList = {
@@ -146,27 +148,15 @@ export default function RootNavigator({ notificationCount }: Props) {
       <Stack.Screen
         name="AktuelDetail"
         component={AktuelDetailScreen}
-        options={({ route }) => {
-          const logos: Record<string, any> = {
-            bim: require('../assets/logos/bim.png'),
-            a101: require('../assets/logos/a101.png'),
-            sok: require('../assets/logos/sok.png'),
-          };
-          const logo = logos[(route.params.storeName || '').toLowerCase()];
-          return {
-            headerTitle: () => logo
-              ? <Image source={logo} style={{ width: 80, height: 32 }} resizeMode="contain" />
-              : <Text style={{ fontWeight: 'bold' }}>{(route.params.storeName || '').toUpperCase()}</Text>,
-            headerTitleAlign: 'center',
-          };
-        }}
+        options={({ route }) => ({ title: (route.params.storeName || '').toUpperCase() })}
       />
       <Stack.Screen name="ProfileHelp" component={ProfileHelpScreen} options={{ title: 'Yardım & Destek' }} />
       <Stack.Screen name="ProfilePrivacy" component={ProfilePrivacyScreen} options={{ title: 'Gizlilik Politikası' }} />
       <Stack.Screen name="ProfileTerms" component={ProfileTermsScreen} options={{ title: 'Kullanım Şartları' }} />
-      <Stack.Screen name="AffiliateForm" component={AffiliateFormScreen} options={{ title: 'İndirim Paylaş', headerTitleAlign: 'center' }} />
-      <Stack.Screen name="AdvertiseForm" component={AdvertiseFormScreen} options={{ title: 'İşbirliği Başvurusu', headerTitleAlign: 'center' }} />
+      <Stack.Screen name="AffiliateForm" component={AffiliateFormScreen} options={{ title: 'İndirim Paylaş' }} />
+      <Stack.Screen name="AdvertiseForm" component={AdvertiseFormScreen} options={{ title: 'İşbirliği Başvurusu' }} />
       <Stack.Screen name="InfluencerStoryDetail" component={InfluencerStoryDetailScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="InfluencerStories" component={InfluencerStoriesScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
@@ -179,12 +169,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
-    shadowColor: '#000',
+    shadowColor: Colors.orange,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: Colors.gray200,
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 1.5,
+    borderColor: Colors.orange + '50',
   },
 });

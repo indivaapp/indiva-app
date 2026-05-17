@@ -107,46 +107,20 @@ export async function fetchDiscounts(
   return { discounts, lastVisible: newLastVisible, hasMore };
 }
 
-const CATEGORY_PAGE_SIZE = 6;
-
-export async function fetchCategoryCounts(): Promise<{ category: string; count: number }[]> {
-  try {
-    const { normalizeCategory } = await import('../constants/categories');
-    const col = collection(db, 'discounts');
-    const q = query(col, orderBy('createdAt', 'desc'), limit(500));
-    const snap = await withTimeout(getDocs(q), 15000, 'Kategori sayımı');
-    const counts: Record<string, number> = {};
-    snap.docs.forEach(d => {
-      const raw = (d.data() as any).category as string;
-      const normalized = normalizeCategory(raw);
-      if (normalized) counts[normalized] = (counts[normalized] ?? 0) + 1;
-    });
-    return Object.entries(counts)
-      .map(([category, count]) => ({ category, count }))
-      .sort((a, b) => b.count - a.count);
-  } catch {
-    return [];
-  }
-}
-
 export async function fetchDiscountsByCategory(
   category: string,
   lastVisible: FirebaseFirestoreTypes.QueryDocumentSnapshot | null = null
 ): Promise<{ discounts: Discount[]; lastVisible: FirebaseFirestoreTypes.QueryDocumentSnapshot | null; hasMore: boolean }> {
   try {
-    const { normalizeCategory } = await import('../constants/categories');
     const col = collection(db, 'discounts');
-    // Her sayfada fazladan çek, normalize filtreden sonra 6 kalacak şekilde
-    const fetchLimit = CATEGORY_PAGE_SIZE * 4;
     const q = lastVisible
-      ? query(col, orderBy('createdAt', 'desc'), startAfter(lastVisible), limit(fetchLimit))
-      : query(col, orderBy('createdAt', 'desc'), limit(fetchLimit));
+      ? query(col, where('category', '==', category), orderBy('createdAt', 'desc'), startAfter(lastVisible), limit(12))
+      : query(col, where('category', '==', category), orderBy('createdAt', 'desc'), limit(12));
     const snap = await withTimeout(getDocs(q), 12000, 'Kategori ilanları');
     const raw = snap.docs.map(d => ({ id: d.id, ...d.data() } as Discount));
-    const filtered = filterDiscounts(raw).filter(d => normalizeCategory(d.category) === category);
+    const filtered = filterDiscounts(raw);
     const newLastVisible = snap.docs[snap.docs.length - 1] ?? null;
-    const hasMore = snap.docs.length === fetchLimit;
-    return { discounts: filtered, lastVisible: newLastVisible, hasMore };
+    return { discounts: filtered, lastVisible: newLastVisible, hasMore: snap.docs.length === 12 };
   } catch {
     return { discounts: [], lastVisible: null, hasMore: false };
   }

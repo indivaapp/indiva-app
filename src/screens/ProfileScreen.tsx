@@ -85,7 +85,9 @@ export default function ProfileScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
-    loadVotesCache().then(() => getContributionStats().then(refreshStats));
+    loadVotesCache()
+      .then(() => getContributionStats().then(refreshStats).catch(() => {}))
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []));
 
@@ -315,9 +317,9 @@ export default function ProfileScreen() {
             ))}
           </View>
 
-          <NativeAdCard style={{ alignSelf: 'stretch', marginTop: 8 }} />
-
           <Text style={{ textAlign: 'center', color: Colors.gray400, fontSize: 12, marginTop: 8 }}>İNDİVA v1.2.0</Text>
+
+          <NativeAdCard style={{ alignSelf: 'stretch', marginTop: 8 }} />
         </View>
       </ScrollView>
 

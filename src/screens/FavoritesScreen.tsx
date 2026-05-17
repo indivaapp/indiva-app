@@ -10,7 +10,7 @@ import { getDiscountById } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, Votes, loadVotesCache } from '../services/voteService';
 import type { Discount } from '../types';
 import DiscountCard from '../components/DiscountCard';
-import NativeAdCard from '../components/NativeAdCard';
+import NativeAdCard, { nativeAdSupported } from '../components/NativeAdCard';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
@@ -55,10 +55,7 @@ export default function FavoritesScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    fetchFavorites();
-  }, [fetchFavorites]));
+  useFocusEffect(useCallback(() => { fetchFavorites(); }, [fetchFavorites]));
 
   const handleRemoveFavorite = async (discountId: string) => {
     setFavoriteDiscounts(prev => prev.filter(d => d.id !== discountId));

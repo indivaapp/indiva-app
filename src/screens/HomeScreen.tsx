@@ -12,11 +12,12 @@ import {
   StatusBar,
   BackHandler,
   Modal,
+  Animated,
 } from 'react-native';
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { fetchDiscounts, fetchDiscountsByCategory, fetchCategoryCounts, getOfflineCache, fetchInfluencerStories } from '../services/firebaseService';
+import { fetchDiscounts, getOfflineCache, fetchInfluencerStories } from '../services/firebaseService';
 import NativeAdCard from '../components/NativeAdCard';
 import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,6 +26,7 @@ import DiscountCard from '../components/DiscountCard';
 import InfluencerStoriesBar from '../components/InfluencerStoriesBar';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
+import { CATEGORIES, normalizeCategory } from '../constants/categories';
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import type { RootStackParamList } from '../navigation';
 
@@ -71,14 +73,42 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [influencerStories, setInfluencerStories] = useState<InfluencerStory[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(true);
   const [viewedStoryIds, setViewedStoryIds] = useState<string[]>([]);
-  const [categories, setCategories] = useState<string[]>(['Tümü']);
+  const bellPulse = useRef(new Animated.Value(1)).current;
+  const bellPulseLoop = useRef<Animated.CompositeAnimation | null>(null);
   const isLoadingRef = useRef(false);
   const flatListRef = useRef<any>(null);
   useScrollToTop(flatListRef);
 
-  useFocusEffect(useCallback(() => {
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-  }, []));
+  const allCategories = ['Tümü', ...CATEGORIES];
+
+  // Pulse animation on bell icon when there are unread notifications
+  useEffect(() => {
+    if (notificationCount > 0) {
+      bellPulseLoop.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(bellPulse, { toValue: 1.18, duration: 380, useNativeDriver: true }),
+          Animated.timing(bellPulse, { toValue: 1, duration: 380, useNativeDriver: true }),
+        ]),
+      );
+      bellPulseLoop.current.start();
+    } else {
+      bellPulseLoop.current?.stop();
+      bellPulse.setValue(1);
+    }
+    return () => bellPulseLoop.current?.stop();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notificationCount]);
+
+  // Sort stories: unseen first, then seen
+  const sortedStories = useMemo(() => {
+    if (!influencerStories.length) return influencerStories;
+    return [...influencerStories].sort((a, b) => {
+      const aViewed = viewedStoryIds.includes(a.id);
+      const bViewed = viewedStoryIds.includes(b.id);
+      if (aViewed === bViewed) return 0;
+      return aViewed ? 1 : -1;
+    });
+  }, [influencerStories, viewedStoryIds]);
 
   useEffect(() => {
     loadVotesCache().then(() => setVotes(getVotes()));
@@ -86,11 +116,6 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     fetchInfluencerStories().then(stories => {
       setInfluencerStories(stories);
       setStoriesLoading(false);
-    });
-    fetchCategoryCounts().then(counts => {
-      if (counts.length > 0) {
-        setCategories(['Tümü', ...counts.map(c => c.category)]);
-      }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -134,25 +159,16 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   };
 
   const loadMore = useCallback(async () => {
-    if (isLoadingRef.current || !hasMore || searchTerm) return;
+    if (isLoadingRef.current || !hasMore || searchTerm || selectedCategory !== 'Tümü') return;
     isLoadingRef.current = true;
     setIsLoading(true);
     try {
-      if (selectedCategory === 'Tümü') {
-        const result = await fetchDiscounts(lastVisible);
-        if (result.discounts.length > 0) {
-          setDiscounts(prev => [...prev, ...result.discounts]);
-          setLastVisible(result.lastVisible);
-        }
-        setHasMore(result.hasMore);
-      } else {
-        const result = await fetchDiscountsByCategory(selectedCategory, lastVisible);
-        if (result.discounts.length > 0) {
-          setDiscounts(prev => [...prev, ...result.discounts]);
-          setLastVisible(result.lastVisible);
-        }
-        setHasMore(result.hasMore);
+      const result = await fetchDiscounts(lastVisible);
+      if (result.discounts.length > 0) {
+        setDiscounts(prev => [...prev, ...result.discounts]);
+        setLastVisible(result.lastVisible);
       }
+      setHasMore(result.hasMore);
     } catch {
       setError('Daha fazla yüklenemedi.');
     } finally {
@@ -188,37 +204,20 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     setFavorites(next);
   }, []);
 
-  // Kategori değişince veriyi sıfırla ve yeni kategoriyi yükle
-  useEffect(() => {
-    if (selectedCategory === 'Tümü') {
-      loadInitial();
-    } else {
-      setDiscounts([]);
-      setLastVisible(null);
-      setHasMore(true);
-      setError(null);
-      setIsLoading(true);
-      fetchDiscountsByCategory(selectedCategory, null).then(result => {
-        setDiscounts(result.discounts);
-        setLastVisible(result.lastVisible);
-        setHasMore(result.hasMore);
-      }).catch(() => setError('Kategori yüklenemedi.')).finally(() => setIsLoading(false));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory]);
-
   const filteredDiscounts = useMemo(() => {
     const lower = searchTerm.toLowerCase();
     return discounts.filter(item => {
       if (isHiddenFromFeed(item.id)) return false;
-      if (!lower) return true;
-      return (
+      const matchSearch =
+        !lower ||
         item.title.toLowerCase().includes(lower) ||
         item.brand.toLowerCase().includes(lower) ||
-        item.category.toLowerCase().includes(lower)
-      );
+        item.category.toLowerCase().includes(lower);
+      const matchCat =
+        selectedCategory === 'Tümü' || normalizeCategory(item.category) === selectedCategory;
+      return matchSearch && matchCat;
     });
-  }, [discounts, searchTerm, votes]);
+  }, [discounts, searchTerm, selectedCategory, votes]);
 
   type HomeSlot = { kind: 'discount'; item: Discount } | { kind: 'ad'; adKey: string };
   type HomeRow = { rowKey: string; left: HomeSlot; right: HomeSlot | null };
@@ -228,8 +227,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     let adCount = 0;
     for (let i = 0; i < filteredDiscounts.length; i++) {
       slots.push({ kind: 'discount', item: filteredDiscounts[i] });
-      // Her 4 indirim kartından sonra 1 native reklam slotu ekle (5. pozisyon)
-      if ((i + 1) % 4 === 0) {
+      // Her 5 indirim kartından sonra 1 native reklam slotu ekle
+      if ((i + 1) % 5 === 0) {
         slots.push({ kind: 'ad', adKey: `ad-${adCount++}` });
       }
     }
@@ -298,17 +297,19 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
               </TouchableOpacity>
             )}
           </View>
-          <TouchableOpacity
-            style={[styles.bellBtn, { backgroundColor: inputBg }]}
-            onPress={() => navigation.navigate('Notifications')}
-          >
-            <Text style={styles.bellIcon}>🔔</Text>
-            {notificationCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{notificationCount > 9 ? '9+' : notificationCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: bellPulse }] }}>
+            <TouchableOpacity
+              style={[styles.bellBtn, { backgroundColor: inputBg }]}
+              onPress={() => navigation.navigate('Notifications')}
+            >
+              <Text style={styles.bellIcon}>🔔</Text>
+              {notificationCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{notificationCount > 9 ? '9+' : notificationCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
         </View>
         {/* Category filter */}
         <ScrollView
@@ -317,7 +318,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
           contentContainerStyle={styles.categoriesContent}
           style={styles.categoriesScroll}
         >
-          {categories.map(cat => (
+          {allCategories.map(cat => (
             <TouchableOpacity
               key={cat}
               onPress={() => setSelectedCategory(cat)}
@@ -375,7 +376,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         <View style={styles.emptyContainer}>
           <Text style={{ fontSize: 40, marginBottom: 12 }}>😕</Text>
           <Text style={{ color: isDark ? Colors.gray300 : Colors.gray600, fontSize: 16, fontWeight: '700' }}>
-            {discounts.length > 0 ? 'Kriterlerinize uygun indirim yok.' : 'Şu an indirim bulunmuyor.'}
+            {filteredDiscounts.length === 0 && discounts.length > 0 ? 'Kriterlerinize uygun indirim yok.' : 'Şu an indirim bulunmuyor.'}
           </Text>
         </View>
       ) : (
@@ -388,13 +389,13 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
           ListHeaderComponent={
             <InfluencerStoriesBar
-              stories={influencerStories}
+              stories={sortedStories}
               loading={storiesLoading}
               viewedIds={viewedStoryIds}
               onPress={story =>
                 navigation.navigate('InfluencerStoryDetail', {
-                  stories: influencerStories,
-                  initialIndex: influencerStories.indexOf(story),
+                  stories: sortedStories,
+                  initialIndex: sortedStories.indexOf(story),
                 })
               }
             />
@@ -521,11 +522,11 @@ const styles = StyleSheet.create({
   categoriesScroll: { marginBottom: 8 },
   categoriesContent: { paddingHorizontal: 12, gap: 8 },
   catChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 20,
   },
-  catText: { fontSize: 13, fontWeight: '600' },
+  catText: { fontSize: 12, fontWeight: '600' },
   offlineBanner: {
     paddingHorizontal: 16,
     paddingVertical: 8,

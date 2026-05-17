@@ -517,7 +517,16 @@ export default function DetailScreen({ route }: Props) {
         {...panResponder.panHandlers}
       >
         {/* Sabit üst bar — scroll edilmez */}
-        <View style={[styles.topBar, { paddingTop: insets.top, backgroundColor: bg }]} />
+        <View style={[styles.topBar, { paddingTop: insets.top, backgroundColor: bg }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Text style={{ fontSize: 22, color: Colors.orange, fontWeight: '700' }}>←</Text>
+          </TouchableOpacity>
+          {routeList && currentIndex >= 0 && (
+            <Text style={{ color: isDark ? Colors.gray500 : Colors.gray400, fontSize: 12, fontWeight: '600' }}>
+              {currentIndex + 1} / {routeList.length}
+            </Text>
+          )}
+        </View>
 
         <ScrollView
           style={[styles.container, { backgroundColor: bg }]}
@@ -547,7 +556,7 @@ export default function DetailScreen({ route }: Props) {
             {/* Discount badge */}
             {!isAd && discountPercentage > 0 && (
               <View style={[styles.discountBadge, { backgroundColor: isHotDeal ? Colors.red500 : Colors.orange }]}>
-                <Text style={styles.discountBadgeText}>🔥 %{discountPercentage}{isHotDeal ? ' DEV' : ''} İNDİRİM</Text>
+                <Text style={styles.discountBadgeText}>{isHotDeal ? '🔥 ' : ''}%{discountPercentage} İNDİRİM</Text>
               </View>
             )}
             {isAd && (
@@ -606,13 +615,6 @@ export default function DetailScreen({ route }: Props) {
             )}
           </Animated.View>
 
-          {/* Banner reklam — başlık ile fiyat kartı arasında */}
-          <BannerAd
-            unitId={BANNER_AD_UNIT_ID}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-          />
-
           {/* Price card */}
           {(d.newPrice > 0 || d.oldPrice > 0) && (
             <Animated.View style={[
@@ -634,33 +636,41 @@ export default function DetailScreen({ route }: Props) {
               </View>
               <View style={styles.priceRow}>
                 <View style={styles.mainPriceRow}>
-                  <Text style={[styles.mainPrice, { color: Colors.orange }]}>{d.newPrice}</Text>
+                  <Text style={[styles.mainPrice, { color: Colors.orange }]}>
+                    {d.newPrice.toLocaleString('tr-TR')}
+                  </Text>
                   <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
                 </View>
                 {d.oldPrice > 0 && (
                   <View style={styles.oldPriceCol}>
                     <Text style={[styles.oldPrice, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
-                      {d.oldPrice} TL
+                      {d.oldPrice.toLocaleString('tr-TR')} TL
                     </Text>
                     {savings > 0 && (
-                      <Text style={[styles.savingsText, { color: isDark ? Colors.green400 : Colors.green500 }]}>
-                        {savings} TL ucuz
-                      </Text>
+                      <View style={[
+                        styles.savingsPill,
+                        {
+                          backgroundColor: isDark ? '#052e16' : '#f0fdf4',
+                          borderColor: isDark ? Colors.green500 + '40' : Colors.green500 + '60',
+                        },
+                      ]}>
+                        <Text style={[styles.savingsPillText, { color: isDark ? Colors.green400 : Colors.green500 }]}>
+                          💚 {savings.toLocaleString('tr-TR')} TL ucuz
+                        </Text>
+                      </View>
                     )}
                   </View>
                 )}
               </View>
-              {savings > 0 && (
-                <View style={styles.cebindeCard}>
-                  <View>
-                    <Text style={styles.cebindeLabel}>Cebinde Kalan</Text>
-                    <Text style={styles.cebindeAmount}>{savings} TL</Text>
-                  </View>
-                  <Text style={{ fontSize: 28 }}>💰</Text>
-                </View>
-              )}
             </Animated.View>
           )}
+
+          {/* Banner reklam — fiyat kartının altında */}
+          <BannerAd
+            unitId={BANNER_AD_UNIT_ID}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+          />
 
           {/* Favorite + Share */}
           <View style={styles.actionRow}>
@@ -843,7 +853,7 @@ export default function DetailScreen({ route }: Props) {
             {incomingDiscount.newPrice > 0 && (
               <View style={[styles.card, styles.priceCard, { backgroundColor: isDark ? '#1a1a2e' : '#fff7f0' }]}>
                 <View style={styles.mainPriceRow}>
-                  <Text style={[styles.mainPrice, { color: Colors.orange }]}>{incomingDiscount.newPrice}</Text>
+                  <Text style={[styles.mainPrice, { color: Colors.orange }]}>{incomingDiscount.newPrice.toLocaleString('tr-TR')}</Text>
                   <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
                 </View>
               </View>
@@ -1003,19 +1013,16 @@ const styles = StyleSheet.create({
   mainPriceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
   mainPrice: { fontSize: 60, fontWeight: '900', lineHeight: 68 },
   priceUnit: { fontSize: 22, fontWeight: '700', marginBottom: 10 },
-  oldPriceCol: { alignItems: 'flex-end', gap: 4, marginBottom: 12 },
+  oldPriceCol: { alignItems: 'flex-end', gap: 6, marginBottom: 12 },
   oldPrice: { textDecorationLine: 'line-through', fontSize: 16, fontWeight: '600' },
-  savingsText: { fontSize: 14, fontWeight: '700' },
-  cebindeCard: {
-    backgroundColor: Colors.green500,
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  savingsPill: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    alignSelf: 'flex-end',
   },
-  cebindeLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1 },
-  cebindeAmount: { color: Colors.white, fontSize: 24, fontWeight: '900', marginTop: 2 },
+  savingsPillText: { fontSize: 11, fontWeight: '700' },
   actionRow: { flexDirection: 'row', gap: 10 },
   actionBtn: {
     flex: 1,

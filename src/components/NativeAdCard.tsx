@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Image, StyleSheet, ActivityIndicator, type StyleProp, type ViewStyle } from 'react-native';
-import { NativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-ads';
+import { useNativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 
@@ -8,28 +8,41 @@ const NATIVE_AD_UNIT_ID = __DEV__
   ? TestIds.NATIVE
   : 'ca-app-pub-3675503435035155/8909740660';
 
+export const nativeAdSupported = typeof useNativeAd === 'function';
+
 export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
+  console.log('[NativeAdCard] nativeAdSupported:', nativeAdSupported);
+  if (!nativeAdSupported) return null;
+  return <NativeAdCardInner style={style} />;
+}
+
+function NativeAdCardInner({ style }: { style?: StyleProp<ViewStyle> }) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
   const cardBg = isDark ? Colors.gray800 : Colors.white;
   const textColor = isDark ? Colors.white : Colors.gray800;
-
-  const [nativeAd, setNativeAd] = useState<NativeAd | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
+  const { isLoaded, load, nativeAd } = useNativeAd({
+    unitId: NATIVE_AD_UNIT_ID,
+    requestOptions: { requestNonPersonalizedAdsOnly: true },
+    onAdFailedToLoad: (error: any) => {
+      console.log('[NativeAdCard] load failed:', error?.message ?? error);
+      setLoadFailed(true);
+    },
+  });
+
   useEffect(() => {
-    let cancelled = false;
-    NativeAd.createForAdRequest(NATIVE_AD_UNIT_ID, {
-      requestNonPersonalizedAdsOnly: true,
-    })
-      .then(ad => { if (!cancelled) setNativeAd(ad); })
-      .catch(() => { if (!cancelled) setLoadFailed(true); });
-    return () => { cancelled = true; };
+    console.log('[NativeAdCard] calling load(), unitId:', NATIVE_AD_UNIT_ID);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (loadFailed) return <View style={{ flex: 1 }} />;
+  console.log('[NativeAdCard] isLoaded:', isLoaded, 'loadFailed:', loadFailed, 'nativeAd:', !!nativeAd);
 
-  if (!nativeAd) {
+  if (loadFailed) return null;
+
+  if (!isLoaded || !nativeAd) {
     return (
       <View style={[styles.container, styles.loading, { backgroundColor: cardBg }, style]}>
         <ActivityIndicator color={Colors.orange} size="small" />

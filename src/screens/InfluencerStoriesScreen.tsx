@@ -30,11 +30,13 @@ export default function InfluencerStoriesScreen() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [currentIndex, setCurrentIndex] = useState(
+    initialIndex >= 0 && initialIndex < posts.length ? initialIndex : 0
+  );
   const progressAnim = useRef(new Animated.Value(0)).current;
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
 
-  const post = posts[currentIndex];
+  const post = posts[currentIndex] ?? posts[0];
 
   const goNext = useCallback(() => {
     if (currentIndex < posts.length - 1) {
