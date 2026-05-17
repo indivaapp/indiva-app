@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, StyleSheet, ActivityIndicator, type StyleProp, type ViewStyle } from 'react-native';
+import { View, Text, Image, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { useNativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
@@ -11,7 +11,6 @@ const NATIVE_AD_UNIT_ID = __DEV__
 export const nativeAdSupported = typeof useNativeAd === 'function';
 
 export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> } = {}) {
-  console.log('[NativeAdCard] nativeAdSupported:', nativeAdSupported);
   if (!nativeAdSupported) return null;
   return <NativeAdCardInner style={style} />;
 }
@@ -19,118 +18,169 @@ export default function NativeAdCard({ style }: { style?: StyleProp<ViewStyle> }
 function NativeAdCardInner({ style }: { style?: StyleProp<ViewStyle> }) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
-  const cardBg = isDark ? Colors.gray800 : Colors.white;
-  const textColor = isDark ? Colors.white : Colors.gray800;
   const [loadFailed, setLoadFailed] = useState(false);
 
   const { isLoaded, load, nativeAd } = useNativeAd({
     unitId: NATIVE_AD_UNIT_ID,
     requestOptions: { requestNonPersonalizedAdsOnly: true },
-    onAdFailedToLoad: (error: any) => {
-      console.log('[NativeAdCard] load failed:', error?.message ?? error);
-      setLoadFailed(true);
-    },
+    onAdFailedToLoad: () => setLoadFailed(true),
   });
 
-  useEffect(() => {
-    console.log('[NativeAdCard] calling load(), unitId:', NATIVE_AD_UNIT_ID);
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  console.log('[NativeAdCard] isLoaded:', isLoaded, 'loadFailed:', loadFailed, 'nativeAd:', !!nativeAd);
-
-  if (loadFailed) return null;
-
-  if (!isLoaded || !nativeAd) {
-    return (
-      <View style={[styles.container, styles.loading, { backgroundColor: cardBg }, style]}>
-        <ActivityIndicator color={Colors.orange} size="small" />
-      </View>
-    );
-  }
+  if (loadFailed || !isLoaded || !nativeAd) return null;
 
   const mainImageUrl = nativeAd.images?.[0]?.url;
   const iconUrl = nativeAd.icon?.url;
 
   return (
-    <NativeAdView nativeAd={nativeAd} style={[styles.container, { backgroundColor: cardBg }, style]}>
-      <View style={[styles.sponsoredBadge, { backgroundColor: isDark ? Colors.gray700 : Colors.gray200 }]}>
-        <Text style={[styles.sponsoredText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>
-          Sponsorlu
-        </Text>
-      </View>
-
-      {mainImageUrl ? (
-        <Image source={{ uri: mainImageUrl }} style={styles.mainImage} resizeMode="cover" />
-      ) : iconUrl ? (
-        <Image source={{ uri: iconUrl }} style={styles.mainImage} resizeMode="cover" />
-      ) : null}
-
-      <View style={styles.headlineRow}>
-        {iconUrl && mainImageUrl && (
-          <Image source={{ uri: iconUrl }} style={styles.advertiserIcon} resizeMode="cover" />
-        )}
-        <Text style={[styles.headline, { color: textColor }]} numberOfLines={2}>
-          {nativeAd.headline}
-        </Text>
-      </View>
-
-      {nativeAd.body ? (
-        <Text style={[styles.body, { color: isDark ? Colors.gray400 : Colors.gray500 }]} numberOfLines={2}>
-          {nativeAd.body}
-        </Text>
-      ) : null}
-
-      {nativeAd.callToAction ? (
-        <View style={styles.ctaBtn}>
-          <Text style={styles.ctaText} numberOfLines={1}>{nativeAd.callToAction}</Text>
+    /* Reklam alanını PanResponder'dan ve diğer gesture handler'lardan izole et */
+    <View
+      onStartShouldSetResponder={() => true}
+      onMoveShouldSetResponder={() => true}
+    >
+      <NativeAdView
+        nativeAd={nativeAd}
+        style={[
+          styles.container,
+          {
+            backgroundColor: isDark ? '#1a1f2e' : '#f0f4ff',
+            borderColor: isDark ? '#2d3748' : '#c7d2fe',
+          },
+          style,
+        ]}
+      >
+        {/* Reklam etiketi — Google politikası gereği açıkça gösterilmeli */}
+        <View style={styles.adLabelRow}>
+          <View style={styles.adLabelBadge}>
+            <Text style={styles.adLabelText}>REKLAM</Text>
+          </View>
+          {nativeAd.advertiser ? (
+            <Text
+              style={[styles.advertiserName, { color: isDark ? Colors.gray400 : Colors.gray500 }]}
+              numberOfLines={1}
+            >
+              {nativeAd.advertiser}
+            </Text>
+          ) : null}
         </View>
-      ) : null}
-    </NativeAdView>
+
+        {/* Ana görsel */}
+        {mainImageUrl ? (
+          <Image source={{ uri: mainImageUrl }} style={styles.mainImage} resizeMode="cover" />
+        ) : iconUrl ? (
+          <Image source={{ uri: iconUrl }} style={styles.iconOnlyImage} resizeMode="cover" />
+        ) : null}
+
+        {/* Başlık + ikon */}
+        <View style={styles.headlineRow}>
+          {iconUrl && mainImageUrl ? (
+            <Image source={{ uri: iconUrl }} style={styles.advertiserIcon} resizeMode="cover" />
+          ) : null}
+          <Text
+            style={[styles.headline, { color: isDark ? Colors.white : Colors.gray800 }]}
+            numberOfLines={2}
+          >
+            {nativeAd.headline}
+          </Text>
+        </View>
+
+        {/* Açıklama */}
+        {nativeAd.body ? (
+          <Text
+            style={[styles.body, { color: isDark ? Colors.gray400 : Colors.gray500 }]}
+            numberOfLines={2}
+          >
+            {nativeAd.body}
+          </Text>
+        ) : null}
+
+        {/* CTA butonu */}
+        {nativeAd.callToAction ? (
+          <View style={styles.ctaBtn}>
+            <Text style={styles.ctaText} numberOfLines={1}>
+              {nativeAd.callToAction}
+            </Text>
+          </View>
+        ) : null}
+      </NativeAdView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    borderRadius: 12,
-    padding: 10,
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 12,
+    gap: 8,
   },
-  loading: {
-    minHeight: 200,
-    justifyContent: 'center',
+  adLabelRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  sponsoredBadge: {
-    alignSelf: 'flex-start',
+  adLabelBadge: {
+    backgroundColor: '#4f46e5',
     paddingHorizontal: 7,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 4,
   },
-  sponsoredText: { fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
+  adLabelText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  advertiserName: {
+    fontSize: 11,
+    fontWeight: '500',
+    flex: 1,
+  },
   mainImage: {
     width: '100%',
-    aspectRatio: 1,
+    aspectRatio: 1.91,
     borderRadius: 8,
     backgroundColor: Colors.gray200,
   },
-  headlineRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
-  advertiserIcon: { width: 20, height: 20, borderRadius: 4, flexShrink: 0, marginTop: 1 },
-  headline: { flex: 1, fontSize: 13, fontWeight: '700', lineHeight: 18 },
-  body: { fontSize: 11, lineHeight: 15 },
-  ctaBtn: {
-    backgroundColor: Colors.orange,
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-    marginTop: 4,
+  iconOnlyImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
+    backgroundColor: Colors.gray200,
   },
-  ctaText: { color: Colors.white, fontSize: 12, fontWeight: '800' },
+  headlineRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  advertiserIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  headline: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  body: {
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  ctaBtn: {
+    backgroundColor: '#4f46e5',
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  ctaText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
 });

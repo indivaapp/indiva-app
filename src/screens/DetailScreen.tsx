@@ -665,12 +665,17 @@ export default function DetailScreen({ route }: Props) {
             </Animated.View>
           )}
 
-          {/* Banner reklam — fiyat kartının altında */}
-          <BannerAd
-            unitId={BANNER_AD_UNIT_ID}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-          />
+          {/* Banner reklam — PanResponder'dan izole edilmiş wrapper içinde */}
+          <View
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+          >
+            <BannerAd
+              unitId={BANNER_AD_UNIT_ID}
+              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+              requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+            />
+          </View>
 
           {/* Favorite + Share */}
           <View style={styles.actionRow}>
