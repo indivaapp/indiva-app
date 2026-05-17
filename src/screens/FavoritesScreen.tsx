@@ -152,7 +152,24 @@ export default function FavoritesScreen() {
           data={listItems}
           keyExtractor={item => item.rowKey}
           renderItem={renderItem}
-          contentContainerStyle={[styles.listContainer, { paddingTop: insets.top, paddingBottom: insets.bottom + 80 }]}
+          contentContainerStyle={[styles.listContainer, { paddingTop: 8, paddingBottom: insets.bottom + 80 }]}
+          ListHeaderComponent={
+            <View style={[styles.listHeader, { paddingTop: insets.top + 4 }]}>
+              <View>
+                <Text style={[styles.listHeaderTitle, { color: isDark ? Colors.white : Colors.gray800 }]}>
+                  Favorilerim
+                </Text>
+                <Text style={[styles.listHeaderSub, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>
+                  {favoriteDiscounts.length} kayıtlı fırsat
+                </Text>
+              </View>
+              <View style={[styles.countBadge, { backgroundColor: Colors.orange + '20', borderColor: Colors.orange + '40' }]}>
+                <Text style={[styles.countBadgeText, { color: Colors.orange }]}>
+                  {favoriteDiscounts.length}
+                </Text>
+              </View>
+            </View>
+          }
         />
       )}
     </View>
@@ -190,4 +207,20 @@ const styles = StyleSheet.create({
   listContainer: { padding: 8 },
   row: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   cardWrapper: { flex: 1 },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    paddingBottom: 14,
+  },
+  listHeaderTitle: { fontSize: 22, fontWeight: '900', letterSpacing: 0.3 },
+  listHeaderSub: { fontSize: 13, marginTop: 2 },
+  countBadge: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  countBadgeText: { fontSize: 16, fontWeight: '900' },
 });

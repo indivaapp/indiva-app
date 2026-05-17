@@ -75,11 +75,26 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const [viewedStoryIds, setViewedStoryIds] = useState<string[]>([]);
   const bellPulse = useRef(new Animated.Value(1)).current;
   const bellPulseLoop = useRef<Animated.CompositeAnimation | null>(null);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const shimmerLoop = useRef<Animated.CompositeAnimation | null>(null);
   const isLoadingRef = useRef(false);
   const flatListRef = useRef<any>(null);
   useScrollToTop(flatListRef);
 
   const allCategories = ['Tümü', ...CATEGORIES];
+
+  // Shimmer animation for skeleton loader
+  useEffect(() => {
+    shimmerLoop.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    shimmerLoop.current.start();
+    return () => shimmerLoop.current?.stop();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Pulse animation on bell icon when there are unread notifications
   useEffect(() => {
@@ -362,11 +377,36 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         </View>
       )}
 
-      {/* Initial skeleton loader */}
+      {/* Initial skeleton loader with shimmer */}
       {isLoading && discounts.length === 0 && !error && (
         <View style={styles.skeletonGrid}>
-          {[0, 1, 2, 3].map(i => (
-            <View key={i} style={[styles.skeletonCard, { backgroundColor: isDark ? Colors.gray800 : Colors.gray200 }]} />
+          {[0, 1, 2, 3, 4, 5].map(i => (
+            <Animated.View
+              key={i}
+              style={[
+                styles.skeletonCard,
+                {
+                  backgroundColor: isDark ? Colors.gray800 : Colors.gray200,
+                  opacity: shimmerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, i % 2 === 0 ? 0.45 : 0.6],
+                  }),
+                },
+              ]}
+            >
+              {/* Image placeholder */}
+              <View style={[styles.skeletonImage, { backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }]} />
+              {/* Text placeholders */}
+              <View style={styles.skeletonContent}>
+                <View style={[styles.skeletonLine, { width: '40%', backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }]} />
+                <View style={[styles.skeletonLine, { width: '90%', backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }]} />
+                <View style={[styles.skeletonLine, { width: '75%', backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }]} />
+                <View style={[styles.skeletonPriceRow]}>
+                  <View style={[styles.skeletonPriceBox, { backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }]} />
+                  <View style={[styles.skeletonPriceBox, { backgroundColor: Colors.orange + '30' }]} />
+                </View>
+              </View>
+            </Animated.View>
           ))}
         </View>
       )}
@@ -556,8 +596,31 @@ const styles = StyleSheet.create({
   },
   skeletonCard: {
     width: '47%',
-    aspectRatio: 0.75,
-    borderRadius: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  skeletonImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 0,
+  },
+  skeletonContent: {
+    padding: 10,
+    gap: 8,
+  },
+  skeletonLine: {
+    height: 10,
+    borderRadius: 5,
+  },
+  skeletonPriceRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+  },
+  skeletonPriceBox: {
+    flex: 1,
+    height: 28,
+    borderRadius: 8,
   },
   emptyContainer: {
     flex: 1,
