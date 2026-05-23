@@ -21,6 +21,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
+import { tsToMs } from '../utils/time';
 import type { RootStackParamList } from '../navigation';
 import type { Story } from '../types';
 
@@ -43,14 +44,6 @@ const INTERSTITIAL_AD_UNIT_ID = __DEV__
   ? TestIds.INTERSTITIAL
   : 'ca-app-pub-3675503435035155/3718760482';
 
-
-function tsToMs(ts: any): number | null {
-  if (!ts) return null;
-  if (typeof ts.toMillis === 'function') return ts.toMillis();
-  if (typeof ts.seconds === 'number') return ts.seconds * 1000;
-  const ms = new Date(ts).getTime();
-  return isNaN(ms) ? null : ms;
-}
 
 function timeAgo(timestamp: any): string {
   try {
@@ -82,6 +75,7 @@ export default function StoryDetailScreen({ route }: Props) {
     initialIndex >= 0 && initialIndex < stories.length ? initialIndex : 0,
   );
   const [imageLoading, setImageLoading] = useState(true);
+  const [backdropReady, setBackdropReady] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // transitionStoryIndex: incoming story panel index during a slide transition (null = idle)
@@ -114,6 +108,9 @@ export default function StoryDetailScreen({ route }: Props) {
   const incomingSlideX = useRef(new Animated.Value(SCREEN_W)).current;
   // Chevron bounce for "swipe up" hint above CTA button.
   const chevronBounce = useRef(new Animated.Value(0)).current;
+  // Fade opacity for swipe-up hint — 1 on story start, fades to 0 after 3s.
+  const swipeHintOpacity = useRef(new Animated.Value(1)).current;
+  const swipeHintFadeRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const shimmerAnim = useRef(new Animated.Value(0)).current;
 
@@ -139,6 +136,24 @@ export default function StoryDetailScreen({ route }: Props) {
     loop.start();
     return () => loop.stop();
   }, [chevronBounce]);
+
+  // Reset swipe-up hint visibility on each story, fade out after 3 seconds
+  useEffect(() => {
+    const hasLink = !!(stories[currentIndex]?.affiliateLink || stories[currentIndex]?.link || stories[currentIndex]?.productLink || stories[currentIndex]?.url);
+    if (!hasLink) return;
+    if (swipeHintFadeRef.current) swipeHintFadeRef.current.stop();
+    swipeHintOpacity.setValue(1);
+    const timer = setTimeout(() => {
+      swipeHintFadeRef.current = Animated.timing(swipeHintOpacity, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      });
+      swipeHintFadeRef.current.start();
+    }, 3000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex]);
 
   // ── Mutable refs (safe for panResponder & callbacks) ─────────────
   const animRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -169,8 +184,11 @@ export default function StoryDetailScreen({ route }: Props) {
   const pendingNavRef = useRef<{ nextIndex: number; direction: 'next' | 'prev' } | null>(null);
 
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
-  // Reset copy feedback when navigating to a different story
-  useEffect(() => { setCopied(false); }, [currentIndex]);
+  // Reset copy feedback + backdrop state when navigating to a different story
+  useEffect(() => {
+    setCopied(false);
+    setBackdropReady(false);
+  }, [currentIndex]);
 
   // ── Transition guard refs ────────────────────────────────────────
   // isTransitioningRef prevents double-fire during animated transitions.
@@ -203,7 +221,13 @@ export default function StoryDetailScreen({ route }: Props) {
       adReadyRef.current = false;
       ad.load();
     });
-    return () => { unsubLoaded(); unsubClosed(); unsubError(); };
+    return () => {
+      unsubLoaded();
+      unsubClosed();
+      unsubError();
+      // Kalan tüm listener'ları temizle — memory leak'i önler
+      ad.removeAllListeners();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -736,11 +760,16 @@ export default function StoryDetailScreen({ route }: Props) {
       {/* Blurred backdrop — always fixed; fills the gap when content slides   */}
       {/* down during dismiss instead of showing the black container background */}
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        {/* Dark placeholder — görünür blur hazır olana kadar siyah yerine */}
+        {!backdropReady && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: '#181818' }]} />
+        )}
         <Image
           source={{ uri: story.productImage }}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
           blurRadius={20}
+          onLoad={() => setBackdropReady(true)}
         />
       </View>
       <View
@@ -879,21 +908,20 @@ export default function StoryDetailScreen({ route }: Props) {
               style={[
                 styles.swipeUpHint,
                 {
+                  opacity: swipeHintOpacity,
                   transform: [{
                     translateY: chevronBounce.interpolate({
                       inputRange: [0, 1],
                       outputRange: [4, -6],
                     }),
                   }],
-                  opacity: chevronBounce.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.55, 1],
-                  }),
                 },
               ]}
             >
-              <Text style={styles.swipeUpChevron}>⌃</Text>
-              <Text style={styles.swipeUpText}>Yukarı kaydır</Text>
+              <View style={styles.swipeUpButton}>
+                <Text style={styles.swipeUpChevron}>⌃</Text>
+                <Text style={styles.swipeUpText}>Yukarı kaydır</Text>
+              </View>
             </Animated.View>
           ) : null}
           <TouchableOpacity
@@ -977,7 +1005,7 @@ export default function StoryDetailScreen({ route }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000', // fallback; covered by story images during transitions
+    backgroundColor: '#181818', // fallback; covered by story images during transitions
     overflow: 'hidden',
   },
   // Semi-transparent darkening layer over the blurred backdrop.
@@ -1111,26 +1139,33 @@ const styles = StyleSheet.create({
   },
   swipeUpHint: {
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
+  },
+  swipeUpButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.orange,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 24,
+    gap: 6,
+    shadowColor: Colors.orange,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
   },
   swipeUpChevron: {
     color: Colors.white,
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: '900',
-    lineHeight: 22,
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    lineHeight: 18,
   },
   swipeUpText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 11,
+    color: Colors.white,
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 0.5,
-    marginTop: 2,
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    letterSpacing: 0.3,
   },
   // ── Coupon ticket ─────────────────────────────────────────────
   couponTicket: {

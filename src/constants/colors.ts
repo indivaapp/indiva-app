@@ -8,10 +8,10 @@ export const Colors = {
   white: '#ffffff',
   black: '#000000',
 
-  gray50: '#fff7ed',
-  gray100: '#f3f4f6',
-  gray200: '#e5e7eb',
-  gray300: '#d1d5db',
+  gray50:  '#f4f4f5',   // açık tema sayfa arkaplanı — zinc nötr gri
+  gray100: '#e4e4e7',   // açık tema input / chip arkaplanı
+  gray200: '#d4d4d8',   // açık tema kenarlık / iskelet
+  gray300: '#c4c4c8',   // açık tema iskelet iç renk
   gray400: '#9ca3af',
   gray500: '#6b7280',
   gray600: '#4b5563',

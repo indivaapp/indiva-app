@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Animated,
   Easing,
+  Image,
 } from 'react-native';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
@@ -210,6 +211,13 @@ function StoryItem({
 export default function StoriesBar({ stories, loading, viewedIds, onPress }: Props) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
+
+  // Story görsellerini önceden native cache'e al → StoryDetail açılınca blur anında hesaplanır
+  useEffect(() => {
+    stories.forEach(s => {
+      if (s.productImage) Image.prefetch(s.productImage).catch(() => {});
+    });
+  }, [stories]);
 
   if (!loading && stories.length === 0) return null;
 

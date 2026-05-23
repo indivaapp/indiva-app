@@ -115,10 +115,7 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
   if (isHidden) return null;
 
   const formatPrice = (price: number) => {
-    if (price % 1 === 0) {
-      return price.toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-    }
-    return price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return Math.floor(price).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   };
 
   const handleShare = async () => {
@@ -129,18 +126,22 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
     } catch {}
   };
 
-  const handleGoToDiscount = () => {
-    if (isAd) {
-      if (discount.link) Linking.openURL(discount.link);
-      return;
-    }
-    if (!isExpired && !isServerExpired && discount.link) {
-      Linking.openURL(discount.link);
+  const handleGoToDiscount = async () => {
+    try {
+      if (isAd) {
+        if (discount.link) await Linking.openURL(discount.link);
+        return;
+      }
+      if (!isExpired && !isServerExpired && discount.link) {
+        await Linking.openURL(discount.link);
+      }
+    } catch {
+      // Bağlantı açılamadı — sessizce yoksay
     }
   };
 
   const handleCardPress = () => {
-    navigation.navigate('Detail', {
+    navigation.push('Detail', {
       id: discount.id,
       discount,
       discountList: discountList ?? undefined,
@@ -219,7 +220,7 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
           {!isAd && (
             <TouchableOpacity
               onPress={onToggleFavorite}
-              style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.92)' }]}
+              style={[styles.actionBtn, { backgroundColor: 'rgba(0,0,0,0.38)' }]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Animated.Text style={{ fontSize: 16, transform: [{ scale: heartScale }] }}>
@@ -229,7 +230,7 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
           )}
           <TouchableOpacity
             onPress={handleShare}
-            style={[styles.actionBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.92)' }]}
+            style={[styles.actionBtn, { backgroundColor: 'rgba(0,0,0,0.38)' }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={{ fontSize: 16 }}>🔗</Text>
@@ -404,11 +405,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
   },
   expiredOverlay: {
     ...StyleSheet.absoluteFill,

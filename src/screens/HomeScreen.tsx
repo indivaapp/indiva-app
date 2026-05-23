@@ -390,29 +390,52 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   }, []);
 
   const filteredDiscounts = useMemo(() => {
-    // Tümü → global feed; Kategori → kategori-spesifik feed (zaten filtreli, arama hariç)
-    const source = selectedCategory === 'Tümü' ? discounts : catDiscounts;
-    const lower  = debouncedSearch.toLowerCase();
+    let source: Discount[];
+    if (selectedCategory === 'Tümü') {
+      source = discounts;
+    } else if (catDiscounts.length > 0) {
+      source = catDiscounts;
+    } else {
+      // Kategori verisi yüklenirken yerel feed'den anlık filtrele (algılanan gecikme sıfır)
+      source = discounts.filter(d => normalizeCategory(d.category) === selectedCategory);
+    }
+    const lower = debouncedSearch.toLowerCase();
     return source.filter(item => {
       if (isHiddenFromFeed(item.id)) return false;
       if (!lower) return true;
       return (
-        item.title.toLowerCase().includes(lower)    ||
-        item.brand.toLowerCase().includes(lower)    ||
+        item.title.toLowerCase().includes(lower) ||
+        item.brand.toLowerCase().includes(lower) ||
         item.category.toLowerCase().includes(lower)
       );
     });
   }, [discounts, catDiscounts, debouncedSearch, selectedCategory]);
 
 
-  type HomeSlot = { kind: 'discount'; item: Discount } | { kind: 'ad'; adKey: string };
-  type HomeRow = { rowKey: string; layout: 'pair'; left: HomeSlot; right: HomeSlot | null };
+  type HomeSlot = { kind: 'discount'; item: Discount };
+  type HomeRow =
+    | { rowKey: string; layout: 'pair'; left: HomeSlot; right: HomeSlot | null }
+    | { rowKey: string; layout: 'ad' };
 
   // ── Debounce: searchTerm → debouncedSearch (300ms) ───────────────
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  // Arka planda ilk 3 kategoriyi prefetch et — ilk açılıştan sonra tıklamalar anında gelir
+  const prefetchDoneRef = useRef(false);
+  useEffect(() => {
+    if (discounts.length === 0 || prefetchDoneRef.current) return;
+    prefetchDoneRef.current = true;
+    const timer = setTimeout(() => {
+      allCategories.slice(1, 4).forEach(cat => {
+        fetchDiscountsByCategoryCached(cat, null).catch(() => {});
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discounts.length]);
 
   // ── Kategori geçişi — hızlı flash (toplam ~120ms) ────────────────
   const catAnimMounted = useRef(false);
@@ -452,8 +475,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     navigation.navigate('StoryDetail', { stories: sortedStories, initialIndex });
   }, [navigation, sortedStories, viewedStoryIds]);
 
-  // Stories bar sadece "Tümü" seçiliyken ve arama yokken görünsün
-  const showStoriesBar = selectedCategory === 'Tümü' && !debouncedSearch;
+  // Stories bar arama yokken tüm kategorilerde görünsün
+  const showStoriesBar = !debouncedSearch;
 
   // selectedCategory değişip useEffect henüz tamamlanmadıysa true:
   // setSelectedCategory → render (isLoading henüz false) → useEffect tetiklenir
@@ -461,36 +484,28 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const isCategoryPending = selectedCategory !== 'Tümü' && catResultsFor !== selectedCategory;
 
   const listItems = useMemo<HomeRow[]>(() => {
-    // Her 4 indirimden sonra grid slotuna native ad yerleştir
-    const slots: HomeSlot[] = [];
+    const rows: HomeRow[] = [];
+    let pairCount = 0;
     let adCount = 0;
 
-    for (let i = 0; i < filteredDiscounts.length; i++) {
-      slots.push({ kind: 'discount', item: filteredDiscounts[i] });
-      if ((i + 1) % 4 === 0) {
-        slots.push({ kind: 'ad', adKey: `ad-${adCount++}` });
-      }
-    }
+    for (let i = 0; i < filteredDiscounts.length; i += 2) {
+      const left: HomeSlot = { kind: 'discount', item: filteredDiscounts[i] };
+      const right: HomeSlot | null = filteredDiscounts[i + 1]
+        ? { kind: 'discount', item: filteredDiscounts[i + 1] }
+        : null;
+      rows.push({ rowKey: `row-${i}`, layout: 'pair', left, right });
+      pairCount++;
 
-    // Slotları ikili satırlara böl
-    const rows: HomeRow[] = [];
-    for (let i = 0; i < slots.length; i += 2) {
-      const left = slots[i];
-      const right = slots[i + 1] ?? null;
-      rows.push({ rowKey: `row-${rows.length}`, layout: 'pair', left, right });
+      // Her 2 çiftten sonra full-width native ad satırı ekle (4 indirimde bir)
+      if (pairCount % 2 === 0) {
+        rows.push({ rowKey: `ad-${adCount++}`, layout: 'ad' });
+      }
     }
     return rows;
   }, [filteredDiscounts]);
 
-  const renderDiscountSlot = (slot: HomeSlot | null) => {
+  const renderDiscountSlot = useCallback((slot: HomeSlot | null) => {
     if (!slot) return <View style={styles.cardWrapper} />;
-    if (slot.kind === 'ad') {
-      return (
-        <View key={slot.adKey} style={styles.cardWrapper}>
-          <NativeAdCard compact />
-        </View>
-      );
-    }
     return (
       <View key={slot.item.id} style={styles.cardWrapper}>
         <DiscountCard
@@ -502,14 +517,25 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         />
       </View>
     );
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [favorites, votes, filteredDiscounts, handleToggleFavorite]);
 
-  const renderItem = ({ item }: { item: HomeRow }) => (
-    <View style={styles.row}>
-      {renderDiscountSlot(item.left)}
-      {renderDiscountSlot(item.right)}
-    </View>
-  );
+  const renderItem = useCallback(({ item }: { item: HomeRow }) => {
+    if (item.layout === 'ad') {
+      return (
+        <View style={styles.adRow}>
+          <NativeAdCard />
+        </View>
+      );
+    }
+    return (
+      <View style={styles.row}>
+        {renderDiscountSlot(item.left)}
+        {renderDiscountSlot(item.right)}
+      </View>
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderDiscountSlot]);
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const headerBg = isDark ? Colors.gray800 : Colors.white;
@@ -574,7 +600,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       )}
 
       {/* Initial skeleton loader with shimmer */}
-      {(isLoading || isCategoryPending) && (selectedCategory === 'Tümü' ? discounts.length === 0 : catDiscounts.length === 0) && !error && (
+      {(isLoading || isCategoryPending) && filteredDiscounts.length === 0 && !error && (
         <View style={styles.skeletonGrid}>
           {[0, 1, 2, 3, 4, 5].map(i => (
             <Animated.View
@@ -610,8 +636,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         data={listItems}
         keyExtractor={(item: HomeRow) => item.rowKey}
         renderItem={renderItem}
-        removeClippedSubviews={false}
-        style={{ flex: 1, opacity: listFade, display: (isLoading || isCategoryPending) && (selectedCategory === 'Tümü' ? discounts.length === 0 : catDiscounts.length === 0) ? 'none' : 'flex' }}
+        removeClippedSubviews={true}
+        style={{ flex: 1, opacity: listFade, display: (isLoading || isCategoryPending) && filteredDiscounts.length === 0 ? 'none' : 'flex' }}
         contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
         ListHeaderComponent={
           /* Story bar + kategori filtreleri — listeyle birlikte kayar */
@@ -825,6 +851,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardWrapper: { flex: 1 },
+  adRow: {
+    paddingHorizontal: 8,
+    marginBottom: 8,
+  },
   skeletonGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

@@ -71,8 +71,8 @@ export default function ProfileScreen() {
   const cardBg = isDark ? Colors.gray800 : Colors.white;
   const textColor = isDark ? Colors.white : Colors.gray800;
 
-  const roadmapCardBg  = isDark ? Colors.gray800 : '#f5f3ff'; // soft lavender
-  const themeCardBg    = isDark ? Colors.gray800 : '#f0fdfa'; // soft mint
+  const roadmapCardBg  = isDark ? Colors.gray800 : Colors.white;
+  const themeCardBg    = isDark ? Colors.gray800 : Colors.white;
 
 
   const refreshStats = (s: ContributionStats) => {
@@ -242,10 +242,14 @@ export default function ProfileScreen() {
           </View>
 
           {/* Rank Ladder */}
-          <View style={[styles.card, { backgroundColor: roadmapCardBg }]}>
+          <View style={[
+            styles.card,
+            { backgroundColor: roadmapCardBg },
+            !isDark && { borderWidth: 1, borderColor: Colors.gray100 },
+          ]}>
             <View style={styles.rankHeader}>
               <Text style={{ fontSize: 15 }}>🏆</Text>
-              <Text style={[styles.sectionLabel, { color: isDark ? Colors.gray500 : Colors.gray400, marginBottom: 0 }]}>Rütbe Yolu</Text>
+              <Text style={[styles.sectionLabel, { color: isDark ? Colors.gray400 : Colors.gray600, marginBottom: 0 }]}>Rütbe Yolu</Text>
             </View>
 
             {[...BADGE_TIERS].reverse().map((tier, index, arr) => {
@@ -272,27 +276,27 @@ export default function ProfileScreen() {
                     <View style={[
                       styles.rankDot,
                       {
-                        backgroundColor: isActive ? tier.ring + '20' : (isDark ? Colors.gray700 : Colors.gray200),
-                        borderColor: isActive ? tier.ring : (isDark ? Colors.gray600 : Colors.gray300),
+                        backgroundColor: isActive ? tier.ring + '20' : (isDark ? Colors.gray700 : Colors.gray100),
+                        borderColor: isActive ? tier.ring : (isDark ? Colors.gray600 : Colors.gray200),
                         borderWidth: isCurrent ? 2.5 : 1.5,
-                        opacity: isActive ? 1 : 0.45,
+                        opacity: isActive ? 1 : 0.65,
                       },
                     ]}>
                       {isPending
                         ? <Text style={{ fontSize: 18 }}>🔓</Text>
-                        : <Text style={{ fontSize: 18, opacity: isActive ? 1 : 0.5 }}>{tier.icon}</Text>
+                        : <Text style={{ fontSize: 18, opacity: isActive ? 1 : 0.7 }}>{tier.icon}</Text>
                       }
                     </View>
 
                     {/* Name + points */}
-                    <View style={{ flex: 1, opacity: isActive ? 1 : 0.45 }}>
+                    <View style={{ flex: 1, opacity: isActive ? 1 : 0.65 }}>
                       <Text style={[
                         styles.rankName,
-                        { color: isCurrent ? tier.ring : (isDark ? Colors.gray100 : Colors.gray800) },
+                        { color: isCurrent ? tier.ring : (isDark ? Colors.gray100 : Colors.gray700) },
                       ]}>
                         {tier.label}
                       </Text>
-                      <Text style={{ fontSize: 11, color: Colors.gray400, marginTop: 1 }}>
+                      <Text style={{ fontSize: 11, color: isDark ? Colors.gray400 : Colors.gray500, marginTop: 1 }}>
                         {tier.min > 0 ? `${tier.min.toLocaleString('tr-TR')}+ puan` : 'Başlangıç'}
                       </Text>
                     </View>
@@ -314,7 +318,7 @@ export default function ProfileScreen() {
                       </View>
                     )}
                     {!isActive && (
-                      <Text style={{ fontSize: 14, color: isDark ? Colors.gray600 : Colors.gray300 }}>🔒</Text>
+                      <Text style={{ fontSize: 14, color: isDark ? Colors.gray500 : Colors.gray400 }}>🔒</Text>
                     )}
                   </TouchableOpacity>
 
@@ -356,7 +360,7 @@ export default function ProfileScreen() {
                 >
                   <Text style={{ fontSize: 14 }}>{opt.icon}</Text>
                   <Text style={{
-                    color: theme === opt.value ? Colors.orange : (isDark ? Colors.gray400 : Colors.gray500),
+                    color: theme === opt.value ? Colors.orange : (isDark ? Colors.gray400 : Colors.gray600),
                     fontWeight: theme === opt.value ? '700' : '500',
                     fontSize: 13,
                   }}>{opt.label}</Text>

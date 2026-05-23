@@ -41,6 +41,9 @@ import type { Discount } from '../types';
 type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>;
 const { width: SCREEN_W } = Dimensions.get('window');
 
+// Oturum içi bellek cache — AsyncStorage okumalarını geçiş başına bir kez sınırlar
+const _vcCache = new Map<string, { firstViewedAt: number; localViews: number }>();
+
 const BANNER_AD_UNIT_ID = __DEV__
   ? TestIds.ADAPTIVE_BANNER
   : 'ca-app-pub-3675503435035155/8261572668';
@@ -104,6 +107,8 @@ export default function DetailScreen({ route }: Props) {
   const [userVoted, setUserVoted] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+  const [bannerLoaded, setBannerLoaded] = useState(false);
+  const [bannerFailed, setBannerFailed] = useState(false);
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [expireCountdown, setExpireCountdown] = useState('');
 
@@ -194,7 +199,7 @@ export default function DetailScreen({ route }: Props) {
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
-  const textColor = isDark ? Colors.white : Colors.gray800;
+  const textColor = isDark ? Colors.white : Colors.gray700;
 
   useFocusEffect(useCallback(() => {
     if (Platform.OS === 'android') {
@@ -204,7 +209,7 @@ export default function DetailScreen({ route }: Props) {
   }, [isDark]));
   const voteCardBg   = isDark ? Colors.gray800 : '#f0fdf4'; // soft green
   const codeCardBg   = isDark ? Colors.gray800 : '#fffbeb'; // soft amber
-  const actionBtnBg  = isDark ? Colors.gray800 : '#f8faff'; // soft blue-white
+  const actionBtnBg  = isDark ? Colors.gray800 : Colors.white;
 
   // Giriş animasyonu: yön bilgisine göre sağdan/soldan kayar gelir
   useEffect(() => {
@@ -334,6 +339,13 @@ export default function DetailScreen({ route }: Props) {
       : 0;
     let intervalId: ReturnType<typeof setInterval>;
     const init = async () => {
+      const cached = _vcCache.get(discountId);
+      if (cached) {
+        const update = () => setViewCount(getFakeViewCount(discountId, pct, cached.firstViewedAt, cached.localViews));
+        update();
+        intervalId = setInterval(update, 30000);
+        return;
+      }
       const firstViewKey = `firstViewed_${discountId}`;
       let firstViewedAt = Date.now();
       try {
@@ -348,6 +360,7 @@ export default function DetailScreen({ route }: Props) {
         localViews = stored ? parseInt(stored, 10) + 1 : 1;
         await AsyncStorage.setItem(lvKey, String(localViews));
       } catch {}
+      _vcCache.set(discountId, { firstViewedAt, localViews });
       const update = () => setViewCount(getFakeViewCount(discountId, pct, firstViewedAt, localViews));
       update();
       intervalId = setInterval(update, 30000);
@@ -364,7 +377,6 @@ export default function DetailScreen({ route }: Props) {
       postTransitionRef.current = false;
       slideX.setValue(0);
       inSlideX.setValue(SCREEN_W);
-      setIncomingDiscount(null);
       titleAnim.setValue(1);
       priceAnim.setValue(1);
     }
@@ -441,18 +453,23 @@ export default function DetailScreen({ route }: Props) {
     const idSnap = currentDiscountIdForView;
     similarLoadingRef.current = true;
     setSimilarLoading(true);
-    fetchDiscountsByCategory(catSnap, similarLastVisible).then(({ discounts, lastVisible, hasMore }) => {
-      const filtered = discounts.filter(d => d.id !== idSnap);
-      setSimilarDiscounts(prev => {
-        const existingIds = new Set(prev.map(x => x.id));
-        return [...prev, ...filtered.filter(d => !existingIds.has(d.id))];
+    fetchDiscountsByCategory(catSnap, similarLastVisible)
+      .then(({ discounts, lastVisible, hasMore }) => {
+        const filtered = discounts.filter(d => d.id !== idSnap);
+        setSimilarDiscounts(prev => {
+          const existingIds = new Set(prev.map(x => x.id));
+          return [...prev, ...filtered.filter(d => !existingIds.has(d.id))];
+        });
+        setSimilarLastVisible(lastVisible);
+        setSimilarHasMore(hasMore);
+      })
+      .catch(() => {
+        // Sessizce yoksay — benzer ürünler isteğe bağlı
+      })
+      .finally(() => {
+        setSimilarLoading(false);
+        similarLoadingRef.current = false;
       });
-      setSimilarLastVisible(lastVisible);
-      setSimilarHasMore(hasMore);
-    }).finally(() => {
-      setSimilarLoading(false);
-      similarLoadingRef.current = false;
-    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [similarHasMore, similarLastVisible, displayedCategory, currentDiscountIdForView]);
 
@@ -516,7 +533,7 @@ export default function DetailScreen({ route }: Props) {
   if (error || !discount) {
     return (
       <View style={[styles.center, { backgroundColor: bg, paddingTop: insets.top }]}>
-        <Text style={{ color: isDark ? Colors.gray300 : Colors.gray600 }}>{error || 'İndirim bulunamadı.'}</Text>
+        <Text style={{ color: isDark ? Colors.gray300 : Colors.gray500 }}>{error || 'İndirim bulunamadı.'}</Text>
       </View>
     );
   }
@@ -525,6 +542,8 @@ export default function DetailScreen({ route }: Props) {
   const d = localDiscount ?? discount!;
 
   const isExpired = isDiscountExpired(d.id, votes);
+  // timeAgoStr 3 kez kullanılıyordu — bir kez hesapla
+  const timeAgoText: string = timeAgoStr(d.createdAt);
   const isAd = d.isAd === true;
   const isFavorite = favorites.includes(d.id);
   const discountPercentage =
@@ -546,7 +565,7 @@ export default function DetailScreen({ route }: Props) {
     const waUrl = `whatsapp://send?text=${encodeURIComponent(text)}`;
     const canOpen = await Linking.canOpenURL(waUrl).catch(() => false);
     if (canOpen) {
-      Linking.openURL(waUrl);
+      await Linking.openURL(waUrl).catch(() => {});
     } else {
       try { await Share.share({ message: text, title: d.title }); } catch {}
     }
@@ -564,9 +583,16 @@ export default function DetailScreen({ route }: Props) {
     await AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(next));
   };
 
-  const handleGoToDiscount = () => {
-    if (isAd) { if (d.link) Linking.openURL(d.link); return; }
-    if (!isExpired && d.link) Linking.openURL(d.link);
+  const handleGoToDiscount = async () => {
+    try {
+      if (isAd) {
+        if (d.link) await Linking.openURL(d.link);
+        return;
+      }
+      if (!isExpired && d.link) await Linking.openURL(d.link);
+    } catch {
+      Alert.alert('Hata', 'Bağlantı açılamadı. Tarayıcınızı kontrol edin.');
+    }
   };
 
   const handleVote = async (voteType: 'active' | 'expired') => {
@@ -637,12 +663,6 @@ export default function DetailScreen({ route }: Props) {
               </View>
             )}
 
-            {/* Time badge */}
-            {timeAgoStr(d.createdAt) && (
-              <View style={styles.timeBadgeHero}>
-                <Text style={styles.timeBadgeHeroText}>⏱ {timeAgoStr(d.createdAt)} yakalandı</Text>
-              </View>
-            )}
 
             {/* Tap hint */}
             <View style={styles.imageHint}>
@@ -659,110 +679,125 @@ export default function DetailScreen({ route }: Props) {
             </View>
           )}
 
-          {/* Title card */}
+          {/* ── Title card ─────────────────────────────────────────── */}
           <Animated.View style={[
-            styles.card,
+            styles.titleCard,
             {
-              backgroundColor: isDark ? '#1e2c3a' : '#f5f8ff',
+              backgroundColor: cardBg,
               opacity: titleAnim,
-              transform: [{ translateY: titleAnim.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }],
+              transform: [{ translateY: titleAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
             },
           ]}>
-            <View style={styles.titleRowTop}>
-              <View style={[styles.catBadge, { backgroundColor: isDark ? Colors.orange + '33' : Colors.orange + '22' }]}>
-                <Text style={[styles.catBadgeText, { color: Colors.orange }]}>{d.category}</Text>
+            {/* Brand + Category */}
+            <View style={styles.titleTopRow}>
+              <Text style={[styles.brandChip, { color: isDark ? Colors.gray300 : Colors.gray500 }]}>
+                {d.brand}
+              </Text>
+              <View style={[styles.catChip, { backgroundColor: isDark ? Colors.orange + '28' : Colors.orange + '16' }]}>
+                <Text style={[styles.catChipText, { color: Colors.orange }]}>{d.category}</Text>
               </View>
-              <Text style={[styles.brandText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>{d.brand}</Text>
             </View>
+
+            <View style={[styles.titleDivider, { backgroundColor: isDark ? Colors.gray700 : Colors.gray100 }]} />
+
+            {/* Title */}
             <Text style={[styles.discountTitle, { color: textColor }]}>{d.title}</Text>
-            {/* Her zaman render — async viewCount gelince layout şişmesini önler */}
-            <Text style={[styles.viewCountText, { color: isDark ? Colors.gray500 : Colors.gray400, opacity: viewCount !== null ? 1 : 0 }]}>
-              {viewCount !== null ? `👁 Bugün ${viewCount.toLocaleString('tr-TR')} kişi inceledi` : '👁'}
-            </Text>
-            {isLowestPrice && !isAd && (
-              <View style={styles.lowestPriceBadge}>
-                <Text style={{ color: Colors.white, fontSize: 12, fontWeight: '800' }}>👑 EN UYGUN FİYAT</Text>
-              </View>
-            )}
+
+
+            <View style={[styles.titleDivider, { backgroundColor: isDark ? Colors.gray700 : Colors.gray100 }]} />
+
+            {/* Meta row: views + time */}
+            <View style={styles.metaRow}>
+              <Text style={[styles.metaText, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
+                👁  {viewCount !== null ? viewCount.toLocaleString('tr-TR') : '–'} inceleme
+              </Text>
+              {timeAgoText ? (
+                <Text style={[styles.metaText, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
+                  ⏱  {timeAgoText}
+                </Text>
+              ) : null}
+            </View>
           </Animated.View>
 
-          {/* Price card */}
+          {/* ── Price card ──────────────────────────────────────────── */}
           {(d.newPrice > 0 || d.oldPrice > 0) && (
             <Animated.View style={[
-              styles.card,
               styles.priceCard,
               {
-                backgroundColor: isDark ? '#1a1a2e' : '#fff7f0',
-                borderTopColor: Colors.orange,
+                backgroundColor: isDark ? '#16111f' : '#ffffff',
                 opacity: priceAnim,
-                transform: [{ translateY: priceAnim.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }],
+                transform: [{ translateY: priceAnim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }],
               },
             ]}>
-              {/* Başlık satırı */}
+              {/* Header: label + discount badge */}
               <View style={styles.priceHeaderRow}>
-                <Text style={[styles.priceHeaderLabel, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
-                  GÜNCEL FİYAT
-                </Text>
+                <View style={styles.priceLabelRow}>
+                  <View style={[styles.priceLabelDot, { backgroundColor: Colors.orange }]} />
+                  <Text style={[styles.priceHeaderLabel, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>
+                    GÜNCEL FİYAT
+                  </Text>
+                </View>
                 {discountPercentage > 0 && (
                   <View style={[styles.pricePctBadge, { backgroundColor: isHotDeal ? Colors.red500 : Colors.orange }]}>
-                    <Text style={styles.pricePctText}>{isHotDeal ? '🔥 ' : ''}%{discountPercentage} İndirim</Text>
+                    <Text style={styles.pricePctText}>
+                      {isHotDeal ? '🔥 ' : ''} %{discountPercentage} İndirim
+                    </Text>
                   </View>
                 )}
               </View>
 
-              {/* Ana fiyat alanı */}
+              {/* Main price */}
               <View style={styles.priceMainRow}>
                 <View style={styles.newPriceGroup}>
                   <Text style={[styles.mainPrice, { color: Colors.orange }]}>
-                    {d.newPrice.toLocaleString('tr-TR')}
+                    {Math.floor(d.newPrice).toLocaleString('tr-TR')}
                   </Text>
                   <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
                 </View>
                 {d.oldPrice > 0 && (
                   <View style={styles.oldPriceGroup}>
                     <Text style={[styles.oldPriceSmallLabel, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>
-                      Önceki fiyat
+                      Liste fiyatı
                     </Text>
                     <Text style={[styles.oldPrice, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
-                      {d.oldPrice.toLocaleString('tr-TR')} TL
+                      {Math.floor(d.oldPrice).toLocaleString('tr-TR')} TL
                     </Text>
-                    {savings > 0 && (
-                      <View style={[
-                        styles.savingsPill,
-                        {
-                          backgroundColor: isDark ? '#052e16' : '#f0fdf4',
-                          borderColor: isDark ? Colors.green500 + '40' : Colors.green500 + '60',
-                        },
-                      ]}>
-                        <Text style={[styles.savingsPillText, { color: isDark ? Colors.green400 : Colors.green500 }]}>
-                          💚 {savings.toLocaleString('tr-TR')} TL tasarruf
-                        </Text>
-                      </View>
-                    )}
                   </View>
                 )}
               </View>
 
-              {/* Alt çizgi + dipnot */}
-              <View style={[styles.priceDivider, { backgroundColor: isDark ? Colors.gray700 : Colors.orange + '25' }]} />
+              {/* Savings bar */}
+              {savings > 0 && (
+                <View style={[styles.savingsBar, {
+                  backgroundColor: isDark ? '#052e16' : '#f0fdf4',
+                  borderColor: isDark ? Colors.green500 + '35' : Colors.green500 + '55',
+                }]}>
+                  <Text style={[styles.savingsBarText, { color: isDark ? Colors.green400 : Colors.green500 }]}>
+                    💚  {savings.toLocaleString('tr-TR')} TL tasarruf ediyorsunuz
+                  </Text>
+                </View>
+              )}
+
+              {/* Footer */}
+              <View style={[styles.priceDivider, { backgroundColor: isDark ? Colors.gray800 : Colors.orange + '18' }]} />
               <Text style={[styles.priceFooterNote, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>
-                ⏱ Fiyat değişkenlik gösterebilir{timeAgoStr(d.createdAt) ? ` · ${timeAgoStr(d.createdAt)} eklendi` : ''}
+                ⏱  Fiyat değişkenlik gösterebilir
               </Text>
             </Animated.View>
           )}
 
-          {/* Banner reklam — PanResponder'dan izole edilmiş wrapper içinde */}
-          <View
-            onStartShouldSetResponder={() => true}
-            onMoveShouldSetResponder={() => true}
-          >
-            <BannerAd
-              unitId={BANNER_AD_UNIT_ID}
-              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-              requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-              onAdFailedToLoad={() => {/* sessizce geç — UI kırılmasın */}}
-            />
-          </View>
+          {/* Banner reklam — yüklenene/fail edene kadar alan kaplamaz */}
+          {!bannerFailed && (
+            <View style={bannerLoaded ? undefined : { height: 0, overflow: 'hidden' }}>
+              <BannerAd
+                unitId={BANNER_AD_UNIT_ID}
+                size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+                requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+                onAdLoaded={() => setBannerLoaded(true)}
+                onAdFailedToLoad={() => setBannerFailed(true)}
+              />
+            </View>
+          )}
 
           {/* Favorite + Share */}
           <View style={styles.actionRow}>
@@ -773,7 +808,7 @@ export default function DetailScreen({ route }: Props) {
               <Animated.Text style={{ fontSize: 16, transform: [{ scale: heartScale }] }}>
                 {isFavorite ? '❤️' : '🤍'}
               </Animated.Text>
-              <Text style={[styles.actionBtnText, { color: isFavorite ? Colors.red500 : (isDark ? Colors.gray300 : Colors.gray600) }]}>
+              <Text style={[styles.actionBtnText, { color: isFavorite ? Colors.red500 : (isDark ? Colors.gray300 : Colors.gray500) }]}>
                 {isFavorite ? 'Favorilendi' : 'Favorile'}
               </Text>
             </TouchableOpacity>
@@ -782,7 +817,7 @@ export default function DetailScreen({ route }: Props) {
               style={[styles.actionBtn, { backgroundColor: actionBtnBg, borderColor: isDark ? Colors.gray700 : Colors.gray200 }]}
             >
               <Text style={{ fontSize: 16 }}>💬</Text>
-              <Text style={[styles.actionBtnText, { color: isDark ? Colors.gray300 : Colors.gray600 }]}>WhatsApp'ta Paylaş</Text>
+              <Text style={[styles.actionBtnText, { color: isDark ? Colors.gray300 : Colors.gray500 }]}>WhatsApp'ta Paylaş</Text>
             </TouchableOpacity>
           </View>
 
@@ -841,7 +876,7 @@ export default function DetailScreen({ route }: Props) {
                 </View>
               ) : !userVoted ? (
                 <View style={{ gap: 10 }}>
-                  <Text style={{ color: isDark ? Colors.gray300 : Colors.gray600, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
+                  <Text style={{ color: isDark ? Colors.gray300 : Colors.gray500, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
                     📊 Bu indirim hâlâ devam ediyor mu?
                   </Text>
                   <View style={styles.voteButtons}>
@@ -941,44 +976,174 @@ export default function DetailScreen({ route }: Props) {
                   containerStyle={styles.heroInner}
                   resizeMode="contain"
                 />
+                {(() => {
+                  const incIsAd = inc.isAd === true;
+                  const incPct = !incIsAd && inc.oldPrice > 0 && inc.newPrice > 0
+                    ? Math.round(((inc.oldPrice - inc.newPrice) / inc.oldPrice) * 100) : 0;
+                  const incHot = incPct >= 30;
+                  if (incIsAd) return (
+                    <View style={[styles.discountBadge, { backgroundColor: Colors.yellow400 }]}>
+                      <Text style={[styles.discountBadgeText, { color: Colors.yellow900 }]}>{inc.adBadge || 'REKLAM'}</Text>
+                    </View>
+                  );
+                  if (incPct > 0) return (
+                    <View style={[styles.discountBadge, { backgroundColor: incHot ? Colors.red500 : Colors.orange }]}>
+                      <Text style={styles.discountBadgeText}>{incHot ? '🔥 ' : ''}%{incPct} İNDİRİM</Text>
+                    </View>
+                  );
+                  return null;
+                })()}
               </View>
 
               {/* Title preview */}
-              <View style={[styles.card, { backgroundColor: isDark ? '#1e2c3a' : '#f5f8ff' }]}>
-                <View style={styles.titleRowTop}>
-                  <View style={[styles.catBadge, { backgroundColor: isDark ? Colors.orange + '33' : Colors.orange + '22' }]}>
-                    <Text style={[styles.catBadgeText, { color: Colors.orange }]}>{inc.category}</Text>
+              <View style={[styles.titleCard, { backgroundColor: cardBg }]}>
+                <View style={styles.titleTopRow}>
+                  <Text style={[styles.brandChip, { color: isDark ? Colors.gray300 : Colors.gray500 }]}>
+                    {inc.brand}
+                  </Text>
+                  <View style={[styles.catChip, { backgroundColor: isDark ? Colors.orange + '28' : Colors.orange + '16' }]}>
+                    <Text style={[styles.catChipText, { color: Colors.orange }]}>{inc.category}</Text>
                   </View>
-                  <Text style={[styles.brandText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>{inc.brand}</Text>
                 </View>
-                <Text style={[styles.discountTitle, { color: textColor }]} numberOfLines={2}>
-                  {inc.title}
-                </Text>
-                <Text style={[styles.viewCountText, { opacity: 0 }]}>👁</Text>
+                <View style={[styles.titleDivider, { backgroundColor: isDark ? Colors.gray700 : Colors.gray100 }]} />
+                <Text style={[styles.discountTitle, { color: textColor }]} numberOfLines={2}>{inc.title}</Text>
+                <View style={[styles.titleDivider, { backgroundColor: isDark ? Colors.gray700 : Colors.gray100 }]} />
+                <View style={styles.metaRow}>
+                  <Text style={[styles.metaText, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
+                    👁  {viewCount !== null ? viewCount.toLocaleString('tr-TR') : '–'} inceleme
+                  </Text>
+                  {timeAgoText ? (
+                    <Text style={[styles.metaText, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
+                      ⏱  {timeAgoText}
+                    </Text>
+                  ) : null}
+                </View>
               </View>
 
               {/* Price preview */}
-              {inc.newPrice > 0 && (
-                <View style={[styles.card, styles.priceCard, { backgroundColor: isDark ? '#1a1a2e' : '#fff7f0', borderTopColor: Colors.orange }]}>
-                  <View style={styles.priceHeaderRow}>
-                    <Text style={[styles.priceHeaderLabel, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>GÜNCEL FİYAT</Text>
-                  </View>
-                  <View style={styles.priceMainRow}>
-                    <View style={styles.newPriceGroup}>
-                      <Text style={[styles.mainPrice, { color: Colors.orange }]}>{inc.newPrice.toLocaleString('tr-TR')}</Text>
-                      <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
+              {(inc.newPrice > 0 || inc.oldPrice > 0) && (() => {
+                const incPct = inc.oldPrice > 0 && inc.newPrice > 0
+                  ? Math.round(((inc.oldPrice - inc.newPrice) / inc.oldPrice) * 100) : 0;
+                const incSavings = inc.oldPrice > inc.newPrice ? Math.round(inc.oldPrice - inc.newPrice) : 0;
+                const incHot = incPct >= 30;
+                return (
+                  <View style={[styles.priceCard, { backgroundColor: isDark ? '#16111f' : '#ffffff' }]}>
+                    <View style={styles.priceHeaderRow}>
+                      <View style={styles.priceLabelRow}>
+                        <View style={[styles.priceLabelDot, { backgroundColor: Colors.orange }]} />
+                        <Text style={[styles.priceHeaderLabel, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>GÜNCEL FİYAT</Text>
+                      </View>
+                      {incPct > 0 && (
+                        <View style={[styles.pricePctBadge, { backgroundColor: incHot ? Colors.red500 : Colors.orange }]}>
+                          <Text style={styles.pricePctText}>{incHot ? '🔥 ' : ''}%{incPct} İndirim</Text>
+                        </View>
+                      )}
                     </View>
-                    {inc.oldPrice > 0 && (
-                      <View style={styles.oldPriceGroup}>
-                        <Text style={[styles.oldPriceSmallLabel, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>Önceki fiyat</Text>
-                        <Text style={[styles.oldPrice, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
-                          {inc.oldPrice.toLocaleString('tr-TR')} TL
+                    <View style={styles.priceMainRow}>
+                      <View style={styles.newPriceGroup}>
+                        <Text style={[styles.mainPrice, { color: Colors.orange }]}>{Math.floor(inc.newPrice).toLocaleString('tr-TR')}</Text>
+                        <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
+                      </View>
+                      {inc.oldPrice > 0 && (
+                        <View style={styles.oldPriceGroup}>
+                          <Text style={[styles.oldPriceSmallLabel, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>Liste fiyatı</Text>
+                          <Text style={[styles.oldPrice, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
+                            {Math.floor(inc.oldPrice).toLocaleString('tr-TR')} TL
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    {incSavings > 0 && (
+                      <View style={[styles.savingsBar, {
+                        backgroundColor: isDark ? '#052e16' : '#f0fdf4',
+                        borderColor: isDark ? Colors.green500 + '35' : Colors.green500 + '55',
+                      }]}>
+                        <Text style={[styles.savingsBarText, { color: isDark ? Colors.green400 : Colors.green500 }]}>
+                          💚  {incSavings.toLocaleString('tr-TR')} TL tasarruf ediyorsunuz
                         </Text>
                       </View>
                     )}
+                    <View style={[styles.priceDivider, { backgroundColor: isDark ? Colors.gray800 : Colors.orange + '18' }]} />
+                    <Text style={[styles.priceFooterNote, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>
+                      ⏱  Fiyat değişkenlik gösterebilir
+                    </Text>
                   </View>
+                );
+              })()}
+
+              {/* Action row preview */}
+              <View style={styles.actionRow}>
+                <View style={[styles.actionBtn, { backgroundColor: actionBtnBg, borderColor: isDark ? Colors.gray700 : Colors.gray200 }]}>
+                  <Text style={{ fontSize: 16 }}>🤍</Text>
+                  <Text style={[styles.actionBtnText, { color: isDark ? Colors.gray300 : Colors.gray500 }]}>Favorile</Text>
                 </View>
-              )}
+                <View style={[styles.actionBtn, { backgroundColor: actionBtnBg, borderColor: isDark ? Colors.gray700 : Colors.gray200 }]}>
+                  <Text style={{ fontSize: 16 }}>💬</Text>
+                  <Text style={[styles.actionBtnText, { color: isDark ? Colors.gray300 : Colors.gray500 }]}>WhatsApp'ta Paylaş</Text>
+                </View>
+              </View>
+
+              {/* CTA preview */}
+              {(() => {
+                const incIsAd = inc.isAd === true;
+                const incExpired = isDiscountExpired(inc.id, votes);
+                const incUserVoted = hasUserVoted(inc.id);
+                const incVoteData = votes[inc.id] || { active: 0, expired: 0 };
+                const incTotalVotes = incVoteData.active + incVoteData.expired;
+                const incActiveRatio = incTotalVotes > 0 ? incVoteData.active / incTotalVotes : 0;
+                const incExpiredRatio = incTotalVotes > 0 ? incVoteData.expired / incTotalVotes : 0;
+                const incVoteType = getUserVoteType(inc.id);
+                return (
+                  <>
+                    <View style={[styles.ctaBtn, {
+                      backgroundColor: incIsAd ? Colors.yellow400 : incExpired ? (isDark ? Colors.gray700 : Colors.gray300) : Colors.orange,
+                    }]}>
+                      <Text style={[styles.ctaBtnText, { color: incIsAd ? Colors.yellow900 : incExpired ? Colors.gray500 : Colors.white }]}>
+                        {incIsAd ? '🛒 İndirime Git' : incExpired ? '⛔ İndirim Tükendi' : '🛒 FIRSATA GİT →'}
+                      </Text>
+                    </View>
+
+                    {/* Voting preview */}
+                    {!incIsAd && (
+                      <View style={[styles.card, { backgroundColor: voteCardBg }]}>
+                        {incExpired ? (
+                          <View style={{ alignItems: 'center', gap: 8 }}>
+                            <Text style={{ color: Colors.red500, fontWeight: '800', fontSize: 14 }}>⚠️ Topluluk bu indirim bitti dedi!</Text>
+                            {renderVoteBars(incActiveRatio, incExpiredRatio, isDark)}
+                          </View>
+                        ) : !incUserVoted ? (
+                          <View style={{ gap: 10 }}>
+                            <Text style={{ color: isDark ? Colors.gray300 : Colors.gray500, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
+                              📊 Bu indirim hâlâ devam ediyor mu?
+                            </Text>
+                            <View style={styles.voteButtons}>
+                              <View style={[styles.voteBtn, { backgroundColor: isDark ? '#052e16' : '#f0fdf4', borderColor: Colors.green500 }]}>
+                                <Text style={{ color: Colors.green500, fontWeight: '700' }}>✅ Devam Ediyor</Text>
+                              </View>
+                              <View style={[styles.voteBtn, { backgroundColor: isDark ? '#1f0a0a' : Colors.red50, borderColor: Colors.red500 }]}>
+                                <Text style={{ color: Colors.red500, fontWeight: '700' }}>❌ Bitti</Text>
+                              </View>
+                            </View>
+                          </View>
+                        ) : (
+                          <View style={{ gap: 8 }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Text style={{ color: Colors.gray400, fontSize: 12, fontWeight: '600' }}>📊 Topluluk Oyları</Text>
+                              <Text style={{ color: incVoteType === 'active' ? Colors.green500 : Colors.red500, fontSize: 12, fontWeight: '700' }}>
+                                {incVoteType === 'active' ? '✅ Oyunuz: Devam Ediyor' : '❌ Oyunuz: Bitti'}
+                              </Text>
+                            </View>
+                            {renderVoteBars(incActiveRatio, incExpiredRatio, isDark)}
+                          </View>
+                        )}
+                        <Text style={[styles.voteFooter, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>
+                          🤖 Oylar algoritmamız tarafından değerlendiriliyor. Çoğunluk "bitti" dediğinde ilan otomatik kaldırılır.
+                        </Text>
+                      </View>
+                    )}
+                  </>
+                );
+              })()}
             </View>
           </Animated.View>
         );
@@ -1026,7 +1191,7 @@ function renderVoteBars(activeRatio: number, expiredRatio: number, isDark: boole
         <View style={[styles.voteBarTrack, { backgroundColor: isDark ? Colors.gray700 : Colors.gray200 }]}>
           <View style={[styles.voteBarFill, { width: `${activeRatio * 100}%`, backgroundColor: Colors.green500 }]} />
         </View>
-        <Text style={{ color: isDark ? Colors.gray300 : Colors.gray600, width: 36, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>
+        <Text style={{ color: isDark ? Colors.gray300 : Colors.gray500, width: 36, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>
           %{Math.round(activeRatio * 100)}
         </Text>
       </View>
@@ -1035,7 +1200,7 @@ function renderVoteBars(activeRatio: number, expiredRatio: number, isDark: boole
         <View style={[styles.voteBarTrack, { backgroundColor: isDark ? Colors.gray700 : Colors.gray200 }]}>
           <View style={[styles.voteBarFill, { width: `${expiredRatio * 100}%`, backgroundColor: Colors.red500 }]} />
         </View>
-        <Text style={{ color: isDark ? Colors.gray300 : Colors.gray600, width: 36, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>
+        <Text style={{ color: isDark ? Colors.gray300 : Colors.gray500, width: 36, textAlign: 'right', fontSize: 12, fontWeight: '700' }}>
           %{Math.round(expiredRatio * 100)}
         </Text>
       </View>
@@ -1098,52 +1263,103 @@ const styles = StyleSheet.create({
     elevation: 3,
     gap: 8,
   },
-  priceCard: {
+
+  // ── Title card ──────────────────────────────────────────────────
+  titleCard: {
     borderRadius: 20,
-    padding: 20,
-    shadowColor: Colors.orange,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 5,
-    gap: 10,
-    borderTopWidth: 3,
+    padding: 18,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  titleRowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  catBadge: {
+  titleTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  brandChip: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  catChip: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
   },
-  catBadgeText: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
-  brandText: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-  discountTitle: { fontSize: 16, fontWeight: '700', lineHeight: 22 },
+  catChipText: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  titleDivider: { height: 1 },
+  discountTitle: { fontSize: 17, fontWeight: '800', lineHeight: 24 },
   lowestPriceBadge: {
-    alignSelf: 'center',
+    alignSelf: 'flex-start',
     backgroundColor: Colors.amber300,
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 20,
   },
-  priceHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  lowestPriceBadgeText: { color: Colors.amber800, fontSize: 12, fontWeight: '800' },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  metaText: { fontSize: 12, fontWeight: '600' },
+
+  // ── Price card ──────────────────────────────────────────────────
+  priceCard: {
+    borderRadius: 20,
+    padding: 20,
+    gap: 14,
+    borderTopWidth: 4,
+    borderTopColor: Colors.orange,
+    shadowColor: Colors.orange,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  priceLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  priceLabelDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  priceHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   priceHeaderLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 2 },
-  pricePctBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  pricePctBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   pricePctText: { color: Colors.white, fontSize: 12, fontWeight: '800' },
   priceMainRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   newPriceGroup: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
-  mainPrice: { fontSize: 60, fontWeight: '900', lineHeight: 68 },
-  priceUnit: { fontSize: 22, fontWeight: '700', marginBottom: 10 },
-  oldPriceGroup: { alignItems: 'flex-end', gap: 4, marginBottom: 10 },
+  mainPrice: { fontSize: 56, fontWeight: '900', lineHeight: 64 },
+  priceUnit: { fontSize: 22, fontWeight: '700', marginBottom: 8 },
+  oldPriceGroup: { alignItems: 'flex-end', gap: 5, marginBottom: 8 },
   oldPriceSmallLabel: { fontSize: 10, fontWeight: '600' },
   oldPrice: { textDecorationLine: 'line-through', fontSize: 15, fontWeight: '600' },
-  savingsPill: {
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  savingsBar: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderWidth: 1,
-    alignSelf: 'flex-end',
+    alignItems: 'center',
   },
-  savingsPillText: { fontSize: 11, fontWeight: '700' },
+  savingsBarText: { fontSize: 14, fontWeight: '700' },
   priceDivider: { height: 1 },
   priceFooterNote: { fontSize: 11, textAlign: 'center' },
   actionRow: { flexDirection: 'row', gap: 10 },
