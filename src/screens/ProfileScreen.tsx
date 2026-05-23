@@ -65,23 +65,33 @@ export default function ProfileScreen() {
   const badgeScale = useRef(new Animated.Value(0)).current;
   const sparkleAnim = useRef(new Animated.Value(0)).current;
   const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
+  const welcomeAnim = useRef(new Animated.Value(0)).current;
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
   const textColor = isDark ? Colors.white : Colors.gray800;
 
-  const welcomeCardBg  = isDark ? Colors.gray800 : '#eff6ff'; // soft blue
   const roadmapCardBg  = isDark ? Colors.gray800 : '#f5f3ff'; // soft lavender
   const themeCardBg    = isDark ? Colors.gray800 : '#f0fdfa'; // soft mint
+
 
   const refreshStats = (s: ContributionStats) => {
     setStats(s);
     progressAnim.setValue(0);
-    Animated.timing(progressAnim, { toValue: s.progress, duration: 1000, useNativeDriver: false }).start();
+    welcomeAnim.setValue(0);
+    Animated.parallel([
+      Animated.timing(progressAnim, { toValue: s.progress, duration: 1000, useNativeDriver: false }),
+      Animated.spring(welcomeAnim, { toValue: 1, friction: 7, tension: 60, useNativeDriver: true }),
+    ]).start();
   };
 
   useEffect(() => {
     rankInterstitial.load();
+    // Hata durumunda yeniden yükle (ağ hatası, fill yok vb.)
+    const unsubError = rankInterstitial.addAdEventListener(AdEventType.ERROR, () => {
+      setTimeout(() => rankInterstitial.load(), 3000);
+    });
+    return () => unsubError();
   }, []);
 
   useFocusEffect(useCallback(() => {
@@ -146,19 +156,27 @@ export default function ProfileScreen() {
         <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 16, gap: 16 }}>
 
           {/* Welcome card */}
-          <View style={[styles.card, { backgroundColor: welcomeCardBg }]}>
-            <View style={styles.welcomeRow}>
-              <View style={styles.avatarCircle}>
-                <Text style={{ fontSize: 24 }}>🎯</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.welcomeTitle, { color: textColor }]}>İNDİVA'ya Hoş Geldin! 👋</Text>
-                <Text style={{ color: isDark ? Colors.gray400 : Colors.gray500, fontSize: 12, lineHeight: 18, marginTop: 2 }}>
-                  Türkiye'nin en sıcak indirimlerini toplulukla birlikte takip ediyoruz.
-                </Text>
-              </View>
-            </View>
-          </View>
+          <Animated.View style={[
+            styles.welcomeHero,
+            isDark ? styles.welcomeHeroDark : styles.welcomeHeroLight,
+            {
+              opacity: welcomeAnim,
+              transform: [{ translateY: welcomeAnim.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }],
+            },
+          ]}>
+            {/* Decorative circles */}
+            <View style={[styles.deco1, { backgroundColor: 'rgba(255,255,255,0.12)' }]} />
+            <View style={[styles.deco2, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
+            <View style={[styles.deco3, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
+
+            <Text style={styles.welcomeHeroHeadline}>
+              Daha az öde,{'\n'}daha çok kazan! 🛍️
+            </Text>
+
+            <Text style={styles.welcomeHeroBody}>
+              Her gün güncellenen yüzlerce indirim fırsatı seni bekliyor. Topluluğun gücüyle en iyi fiyatları ilk sen keşfet, fırsatları kaçırma!
+            </Text>
+          </Animated.View>
 
           {/* Contribution card */}
           <View style={styles.contribCard}>
@@ -223,49 +241,97 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Badge road map */}
+          {/* Rank Ladder */}
           <View style={[styles.card, { backgroundColor: roadmapCardBg }]}>
-            <Text style={[styles.sectionLabel, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>Rozet Yol Haritası</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
-              {[...BADGE_TIERS].reverse().map(tier => {
-                const earned = stats.points >= tier.min;
-                const isCurrent = stats.badge.label === tier.label;
-                const isPending = stats.pendingRankUp?.label === tier.label;
-                return (
+            <View style={styles.rankHeader}>
+              <Text style={{ fontSize: 15 }}>🏆</Text>
+              <Text style={[styles.sectionLabel, { color: isDark ? Colors.gray500 : Colors.gray400, marginBottom: 0 }]}>Rütbe Yolu</Text>
+            </View>
+
+            {[...BADGE_TIERS].reverse().map((tier, index, arr) => {
+              const earned = stats.points >= tier.min;
+              const isCurrent = stats.badge.label === tier.label;
+              const isPending = stats.pendingRankUp?.label === tier.label;
+              const isActive = earned || isCurrent || isPending;
+              const isLast = index === arr.length - 1;
+
+              return (
+                <View key={tier.label}>
                   <TouchableOpacity
-                    key={tier.label}
-                    activeOpacity={isPending ? 0.8 : 1}
+                    activeOpacity={isPending ? 0.75 : 1}
                     onPress={isPending ? handleUnlockPress : undefined}
                     style={[
-                      styles.tierCard,
-                      {
-                        backgroundColor: isCurrent
-                          ? (isDark ? Colors.orange + '22' : '#fff7ed')
-                          : isPending
-                          ? (isDark ? '#1a2e1a' : '#f0fdf4')
-                          : (isDark ? Colors.gray700 + '80' : Colors.gray50),
-                        borderColor: isCurrent ? Colors.orange : isPending ? Colors.green500 : Colors.gray200,
-                        borderWidth: isCurrent || isPending ? 2 : 1,
-                        opacity: earned || isCurrent || isPending ? 1 : 0.4,
+                      styles.rankRow,
+                      isCurrent && {
+                        backgroundColor: isDark ? tier.ring + '20' : tier.ring + '14',
+                        borderRadius: 14,
                       },
                     ]}
                   >
-                    {isPending ? (
-                      <Animated.Text style={{ fontSize: 22, transform: [{ scale: unlockPulse }] }}>🔓</Animated.Text>
-                    ) : (
-                      <Text style={{ fontSize: 22 }}>{tier.icon}</Text>
+                    {/* Icon circle */}
+                    <View style={[
+                      styles.rankDot,
+                      {
+                        backgroundColor: isActive ? tier.ring + '20' : (isDark ? Colors.gray700 : Colors.gray200),
+                        borderColor: isActive ? tier.ring : (isDark ? Colors.gray600 : Colors.gray300),
+                        borderWidth: isCurrent ? 2.5 : 1.5,
+                        opacity: isActive ? 1 : 0.45,
+                      },
+                    ]}>
+                      {isPending
+                        ? <Text style={{ fontSize: 18 }}>🔓</Text>
+                        : <Text style={{ fontSize: 18, opacity: isActive ? 1 : 0.5 }}>{tier.icon}</Text>
+                      }
+                    </View>
+
+                    {/* Name + points */}
+                    <View style={{ flex: 1, opacity: isActive ? 1 : 0.45 }}>
+                      <Text style={[
+                        styles.rankName,
+                        { color: isCurrent ? tier.ring : (isDark ? Colors.gray100 : Colors.gray800) },
+                      ]}>
+                        {tier.label}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: Colors.gray400, marginTop: 1 }}>
+                        {tier.min > 0 ? `${tier.min.toLocaleString('tr-TR')}+ puan` : 'Başlangıç'}
+                      </Text>
+                    </View>
+
+                    {/* Status chip */}
+                    {isCurrent && (
+                      <View style={[styles.rankChip, { backgroundColor: tier.ring }]}>
+                        <Text style={styles.rankChipText}>AKTİF</Text>
+                      </View>
                     )}
-                    <Text style={[styles.tierLabel, {
-                      color: isCurrent ? Colors.orange : isPending ? Colors.green500 : textColor,
-                    }]}>{tier.label}</Text>
-                    <Text style={{ color: Colors.gray400, fontSize: 10 }}>{tier.min}+ puan</Text>
-                    {isCurrent && <Text style={{ color: Colors.orange, fontSize: 10, fontWeight: '800' }}>AKTİF</Text>}
-                    {earned && !isCurrent && !isPending && <Text style={{ color: Colors.green500, fontSize: 12 }}>✓</Text>}
-                    {isPending && <Text style={{ color: Colors.green500, fontSize: 9, fontWeight: '800' }}>KİLİDİ AÇ</Text>}
+                    {isPending && (
+                      <Animated.View style={[styles.rankChip, { backgroundColor: Colors.green500, transform: [{ scale: unlockPulse }] }]}>
+                        <Text style={styles.rankChipText}>KİLİDİ AÇ</Text>
+                      </Animated.View>
+                    )}
+                    {earned && !isCurrent && !isPending && (
+                      <View style={[styles.rankCheckCircle, { backgroundColor: Colors.green500 + '22' }]}>
+                        <Text style={{ fontSize: 12, color: Colors.green500, fontWeight: '900' }}>✓</Text>
+                      </View>
+                    )}
+                    {!isActive && (
+                      <Text style={{ fontSize: 14, color: isDark ? Colors.gray600 : Colors.gray300 }}>🔒</Text>
+                    )}
                   </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+
+                  {/* Vertical connector line */}
+                  {!isLast && (
+                    <View style={[
+                      styles.rankConnector,
+                      {
+                        backgroundColor: isActive && stats.points >= arr[index + 1].min
+                          ? tier.ring + '40'
+                          : (isDark ? Colors.gray700 : Colors.gray200),
+                      },
+                    ]} />
+                  )}
+                </View>
+              );
+            })}
           </View>
 
           {/* Theme picker */}
@@ -398,13 +464,50 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  welcomeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatarCircle: {
-    width: 48, height: 48, borderRadius: 24,
-    backgroundColor: Colors.orange + '22',
-    alignItems: 'center', justifyContent: 'center',
+  welcomeHero: {
+    borderRadius: 24,
+    padding: 20,
+    gap: 14,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  welcomeTitle: { fontSize: 16, fontWeight: '800' },
+  welcomeHeroLight: {
+    backgroundColor: Colors.orange,
+    shadowColor: Colors.orange,
+  },
+  welcomeHeroDark: {
+    backgroundColor: '#7c2d06',
+    shadowColor: '#000',
+  },
+  // Decorative background circles
+  deco1: {
+    position: 'absolute', width: 160, height: 160, borderRadius: 80,
+    top: -50, right: -40,
+  },
+  deco2: {
+    position: 'absolute', width: 100, height: 100, borderRadius: 50,
+    bottom: -30, left: -20,
+  },
+  deco3: {
+    position: 'absolute', width: 70, height: 70, borderRadius: 35,
+    top: 20, right: 90,
+  },
+  welcomeHeroHeadline: {
+    color: '#fff',
+    fontSize: 26,
+    fontWeight: '900',
+    lineHeight: 32,
+    letterSpacing: -0.5,
+  },
+  welcomeHeroBody: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
   contribCard: {
     borderRadius: 20,
     padding: 20,
@@ -452,11 +555,32 @@ const styles = StyleSheet.create({
   statLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '500' },
   statPts: { color: 'rgba(255,255,255,0.4)', fontSize: 10 },
   sectionLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
-  tierCard: {
-    width: 90, borderRadius: 14, paddingVertical: 10,
-    alignItems: 'center', gap: 3,
+  // Rank ladder
+  rankHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  rankRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 8, paddingHorizontal: 8,
   },
-  tierLabel: { fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  rankDot: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  rankName: { fontSize: 14, fontWeight: '800' },
+  rankChip: {
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+  },
+  rankChipText: { fontSize: 10, fontWeight: '800', color: '#fff' },
+  rankCheckCircle: {
+    width: 26, height: 26, borderRadius: 13,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  rankConnector: {
+    width: 2, height: 8,
+    marginLeft: 29, // 8px padding + 22px (half of 44px dot) - 1px (half line width)
+    borderRadius: 1,
+  },
   themeHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   themeHeaderText: { fontWeight: '600', fontSize: 14 },
   themeToggle: { flexDirection: 'row', borderRadius: 12, padding: 4, gap: 4 },

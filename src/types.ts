@@ -54,17 +54,17 @@ export interface PendingDiscount {
   status: 'pending';
 }
 
-export interface InfluencerStory {
+export interface Story {
   id: string;
-  influencerName: string;
-  influencerHandle: string;
-  influencerAvatar: string;
-  productTitle: string;
   productImage: string;
-  productBrand: string;
-  affiliateLink: string;
-  category: string;
+  link?: string;
+  affiliateLink?: string; // Firebase'deki gerçek alan adı
+  productLink?: string;
+  url?: string;
+  title?: string;
+  brand?: string;
   isActive: boolean;
+  discountCode?: string;
   expiresAt?: FirebaseFirestoreTypes.Timestamp;
   createdAt: FirebaseFirestoreTypes.Timestamp;
 }

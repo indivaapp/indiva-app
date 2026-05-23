@@ -24,8 +24,6 @@ interface DiscountCardProps {
   onToggleFavorite: () => void;
   isExpired: boolean;
   discountList?: Discount[];
-  // Ad banner slot index — if provided, renders an AdMob banner before this card
-  adSlotIndex?: number;
 }
 
 const DiscountCardInner: React.FC<DiscountCardProps> = ({

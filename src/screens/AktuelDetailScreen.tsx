@@ -240,6 +240,7 @@ export default function AktuelDetailScreen({ route }: Props) {
                   unitId={BANNER_AD_UNIT_ID}
                   size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
                   requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+                  onAdFailedToLoad={() => {/* sessizce geç */}}
                 />
               </View>
             );
@@ -269,16 +270,13 @@ export default function AktuelDetailScreen({ route }: Props) {
                   resizeMode="cover"
                 />
               </View>
-              <View style={styles.brochureInfo}>
-                <Text style={[styles.brochureTitle, { color: isDark ? Colors.white : Colors.gray800 }]} numberOfLines={1}>
-                  {data.title}
-                </Text>
-                {data.validityDate ? (
+              {data.validityDate ? (
+                <View style={styles.brochureInfo}>
                   <Text style={{ color: isDark ? Colors.gray400 : Colors.gray500, fontSize: 11 }}>
                     📅 {data.validityDate}
                   </Text>
-                ) : null}
-              </View>
+                </View>
+              ) : null}
             </TouchableOpacity>
           );
         }}
@@ -412,8 +410,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   brochureImageContainer: { aspectRatio: 3 / 4, width: '100%', backgroundColor: Colors.gray100 },
-  brochureInfo: { padding: 12, gap: 4 },
-  brochureTitle: { fontSize: 14, fontWeight: '700' },
+  brochureInfo: { paddingHorizontal: 12, paddingVertical: 8 },
   bannerWrapper: { alignItems: 'center', marginVertical: 4 },
   nativeAdWrapper: { marginHorizontal: 8, marginVertical: 6 },
   lightboxBg: {

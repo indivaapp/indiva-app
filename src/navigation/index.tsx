@@ -1,11 +1,11 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
-import type { Discount, InfluencerStory, InfluencerPost } from '../types';
+import type { Discount, Story } from '../types';
 
 // Screens
 import HomeScreen from '../screens/HomeScreen';
@@ -14,6 +14,14 @@ import FavoritesScreen from '../screens/FavoritesScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import AktuelScreen from '../screens/AktuelScreen';
 import AktuelDetailScreen from '../screens/AktuelDetailScreen';
+
+// Store logos for AktuelDetail header
+const STORE_LOGOS: Record<string, any> = {
+  bim:  require('../assets/logos/bim.png'),
+  a101: require('../assets/logos/a101.png'),
+  sok:  require('../assets/logos/sok.png'),
+};
+import BackButton from '../components/BackButton';
 import ProfileScreen from '../screens/ProfileScreen';
 import ProfileHelpScreen from '../screens/ProfileHelpScreen';
 import ProfilePrivacyScreen from '../screens/ProfilePrivacyScreen';
@@ -21,8 +29,7 @@ import ProfileTermsScreen from '../screens/ProfileTermsScreen';
 import KazanScreen from '../screens/KazanScreen';
 import AffiliateFormScreen from '../screens/AffiliateFormScreen';
 import AdvertiseFormScreen from '../screens/AdvertiseFormScreen';
-import InfluencerStoryDetailScreen from '../screens/InfluencerStoryDetailScreen';
-import InfluencerStoriesScreen from '../screens/InfluencerStoriesScreen';
+import StoryDetailScreen from '../screens/InfluencerStoryDetailScreen';
 
 export type RootStackParamList = {
   MainTabs: undefined;
@@ -34,8 +41,7 @@ export type RootStackParamList = {
   ProfileTerms: undefined;
   AffiliateForm: undefined;
   AdvertiseForm: undefined;
-  InfluencerStoryDetail: { stories: InfluencerStory[]; initialIndex: number };
-  InfluencerStories: { posts: InfluencerPost[]; initialIndex: number };
+  StoryDetail: { stories: Story[]; initialIndex: number };
 };
 
 export type TabParamList = {
@@ -144,19 +150,73 @@ export default function RootNavigator({ notificationCount }: Props) {
       </Stack.Screen>
 
       <Stack.Screen name="Detail" component={DetailScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Bildirimler' }} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ headerShown: false }} />
       <Stack.Screen
         name="AktuelDetail"
         component={AktuelDetailScreen}
-        options={({ route }) => ({ title: (route.params.storeName || '').toUpperCase() })}
+        options={({ navigation, route }) => {
+          const slug = (route.params.storeName || '').toLowerCase();
+          const logo = STORE_LOGOS[slug];
+          return {
+            headerTitleAlign: 'center',
+            headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
+            title: slug.toUpperCase(),
+            headerTitle: () =>
+              logo ? (
+                <Image
+                  source={logo}
+                  style={{ width: 90, height: 32 }}
+                  resizeMode="contain"
+                />
+              ) : (
+                <Text style={{ fontSize: 16, fontWeight: '800' }}>{slug.toUpperCase()}</Text>
+              ),
+          };
+        }}
       />
-      <Stack.Screen name="ProfileHelp" component={ProfileHelpScreen} options={{ title: 'Yardım & Destek' }} />
-      <Stack.Screen name="ProfilePrivacy" component={ProfilePrivacyScreen} options={{ title: 'Gizlilik Politikası' }} />
-      <Stack.Screen name="ProfileTerms" component={ProfileTermsScreen} options={{ title: 'Kullanım Şartları' }} />
-      <Stack.Screen name="AffiliateForm" component={AffiliateFormScreen} options={{ title: 'İndirim Paylaş' }} />
-      <Stack.Screen name="AdvertiseForm" component={AdvertiseFormScreen} options={{ title: 'İşbirliği Başvurusu' }} />
-      <Stack.Screen name="InfluencerStoryDetail" component={InfluencerStoryDetailScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="InfluencerStories" component={InfluencerStoriesScreen} options={{ headerShown: false }} />
+      <Stack.Screen
+        name="ProfileHelp"
+        component={ProfileHelpScreen}
+        options={({ navigation }) => ({
+          title: 'Yardım & Destek',
+          headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
+        })}
+      />
+      <Stack.Screen
+        name="ProfilePrivacy"
+        component={ProfilePrivacyScreen}
+        options={({ navigation }) => ({
+          title: 'Gizlilik Politikası',
+          headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
+        })}
+      />
+      <Stack.Screen
+        name="ProfileTerms"
+        component={ProfileTermsScreen}
+        options={({ navigation }) => ({
+          title: 'Kullanım Şartları',
+          headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
+        })}
+      />
+      <Stack.Screen
+        name="AffiliateForm"
+        component={AffiliateFormScreen}
+        options={({ navigation }) => ({
+          title: 'İndirim Paylaş',
+          headerTitleAlign: 'center',
+          headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
+        })}
+      />
+      <Stack.Screen
+        name="AdvertiseForm"
+        component={AdvertiseFormScreen}
+        options={({ navigation }) => ({
+          title: 'İşbirliği Başvurusu',
+          headerTitleAlign: 'center',
+          headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
+        })}
+      />
+      <Stack.Screen name="StoryDetail" component={StoryDetailScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

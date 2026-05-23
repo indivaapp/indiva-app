@@ -26,7 +26,7 @@ import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads'
 import NativeAdCard from '../components/NativeAdCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
-import { getDiscountById, fetchSimilarDiscounts } from '../services/firebaseService';
+import { getDiscountById, fetchDiscountsByCategory, fetchDiscountsByCategoryCached } from '../services/firebaseService';
 import {
   getVotes, isDiscountExpired, addVote, Votes,
   hasUserVoted, getUserVoteType, setExpireTimer, getExpireAt,
@@ -94,6 +94,10 @@ export default function DetailScreen({ route }: Props) {
 
   const [discount, setDiscount] = useState<Discount | null>(routeDiscount ?? null);
   const [similarDiscounts, setSimilarDiscounts] = useState<Discount[]>([]);
+  const [similarLastVisible, setSimilarLastVisible] = useState<any>(null);
+  const [similarHasMore, setSimilarHasMore] = useState(false);
+  const [similarLoading, setSimilarLoading] = useState(false);
+  const similarLoadingRef = useRef(false);
   const [isLoading, setIsLoading] = useState(!routeDiscount);
   const [error, setError] = useState('');
   const [votes, setVotes] = useState<Votes>(getVotes());
@@ -118,7 +122,7 @@ export default function DetailScreen({ route }: Props) {
 
   // Animasyon değerleri
   const slideX      = useRef(new Animated.Value(0)).current;
-  const inSlideX    = useRef(new Animated.Value(0)).current;
+  const inSlideX    = useRef(new Animated.Value(SCREEN_W)).current;
   const lbZoom      = useRef(new Animated.Value(1)).current;
   const lbZoomRef   = useRef(1);
   const lbPinchDist = useRef(0);
@@ -180,6 +184,13 @@ export default function DetailScreen({ route }: Props) {
   localIndexRef.current = localIndex;
   setIncomingRef.current = setIncomingDiscount;
   routeListRef.current = routeList;
+
+  // Transition guard — prevents overlapping animations
+  const isTransitioningRef = useRef(false);
+  // postTransitionRef: set true in animation callback; positions reset in useEffect
+  // AFTER React commits the new localIndex (same pattern as InfluencerStoryDetailScreen).
+  // Eliminates the race where slideX.setValue(0) fires before React renders new content.
+  const postTransitionRef = useRef(false);
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
@@ -247,6 +258,13 @@ export default function DetailScreen({ route }: Props) {
     });
   }, [id]);
 
+  // Slide ile geçilen indirim değişince oy durumunu güncelle
+  useEffect(() => {
+    if (!localDiscount?.id) return;
+    setUserVoted(hasUserVoted(localDiscount.id));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localDiscount?.id]);
+
   useEffect(() => {
     if (!routeDiscount) {
       setIsLoading(true);
@@ -260,20 +278,39 @@ export default function DetailScreen({ route }: Props) {
     }
   }, [id, routeDiscount]);
 
-  useEffect(() => {
-    if (discount?.id && discount?.category) {
-      fetchSimilarDiscounts(discount.category, discount.id).then(setSimilarDiscounts);
-    }
-  }, [discount?.id, discount?.category]);
+  // Slide sonrası localDiscount değişince benzer ürünleri de yenile
+  const displayedCategory = localDiscount?.category ?? discount?.category;
 
-  // Expire countdown
   useEffect(() => {
-    if (!id) return;
+    if (!currentDiscountIdForView || !displayedCategory) return;
+    const targetId = currentDiscountIdForView;
+    const targetCat = displayedCategory;
+    setSimilarDiscounts([]);
+    setSimilarLastVisible(null);
+    setSimilarHasMore(false);
+    setSimilarLoading(true);
+    similarLoadingRef.current = true;
+    fetchDiscountsByCategoryCached(targetCat, null).then(({ discounts, lastVisible, hasMore }) => {
+      const filtered = discounts.filter(d => d.id !== targetId);
+      setSimilarDiscounts(filtered);
+      setSimilarLastVisible(lastVisible);
+      setSimilarHasMore(hasMore);
+    }).finally(() => {
+      setSimilarLoading(false);
+      similarLoadingRef.current = false;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDiscountIdForView, displayedCategory]);
+
+  // Expire countdown — slide sonrası currentDiscountIdForView değişince güncellenir
+  useEffect(() => {
+    const dId = currentDiscountIdForView;
+    if (!dId) return;
     const currentVotes = getVotes();
-    if (!isDiscountExpired(id, currentVotes)) return;
-    setExpireTimer(id);
+    if (!isDiscountExpired(dId, currentVotes)) { setExpireCountdown(''); return; }
+    setExpireTimer(dId);
     const tick = () => {
-      const expireAt = getExpireAt(id);
+      const expireAt = getExpireAt(dId);
       if (!expireAt) return;
       const rem = expireAt - Date.now();
       if (rem <= 0) { setExpireCountdown('00:00'); return; }
@@ -284,7 +321,8 @@ export default function DetailScreen({ route }: Props) {
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [id, votes]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDiscountIdForView, votes]);
 
   // Fake view count: deterministic target, grows linearly 4-8 hours from first visit
   useEffect(() => {
@@ -319,48 +357,54 @@ export default function DetailScreen({ route }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDiscountIdForView]);
 
-  // navigation.replace yerine in-place geçiş — remount yok, kesintisiz animasyon
-  const resetSlideState = useCallback((target?: typeof localDiscount) => {
-    slideX.stopAnimation();
-    inSlideX.stopAnimation();
-    slideX.setValue(0);
-    inSlideX.setValue(0);
-    setIncomingDiscount(null);
-    if (target) {
-      titleAnim.setValue(0);
-      priceAnim.setValue(0);
-      Animated.stagger(110, [
-        Animated.timing(titleAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(priceAnim, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      ]).start();
+  // postTransitionRef useEffect: positions reset AFTER React commits new localIndex —
+  // prevents the 1-frame flash of old content when slideX.setValue(0) fires before render.
+  useEffect(() => {
+    if (postTransitionRef.current) {
+      postTransitionRef.current = false;
+      slideX.setValue(0);
+      inSlideX.setValue(SCREEN_W);
+      setIncomingDiscount(null);
+      titleAnim.setValue(1);
+      priceAnim.setValue(1);
     }
-  }, [slideX, inSlideX, titleAnim, priceAnim]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localIndex]);
 
   const doSlide = useCallback((dir: 'prev' | 'next') => {
-    if (!routeList) return;
-    const targetIndex = dir === 'next' ? localIndex + 1 : localIndex - 1;
-    if (targetIndex < 0 || targetIndex >= routeList.length) return;
-    const target = routeList[targetIndex];
+    const list = routeListRef.current;
+    if (!list) return;
+    // Guard: block re-entry while transition is running
+    if (isTransitioningRef.current) return;
 
-    // Önceki animasyonu iptal et
+    // Always read index from ref — closure value may be stale on rapid swipes
+    const currentIdx = localIndexRef.current;
+    const targetIndex = dir === 'next' ? currentIdx + 1 : currentIdx - 1;
+    if (targetIndex < 0 || targetIndex >= list.length) return;
+    const target = list[targetIndex];
+
     slideX.stopAnimation();
     inSlideX.stopAnimation();
 
-    inSlideX.setValue(dir === 'next' ? SCREEN_W : -SCREEN_W);
-    setIncomingDiscount(target);
+    // Incoming panel already positioned by gesture; just ensure correct content
+    setIncomingRef.current(prev => (prev?.id === target.id ? prev : target));
 
-    // Safety: animasyon tamamlanmazsa 800ms sonra zorla sıfırla
+    isTransitioningRef.current = true;
+
+    // Safety fallback: if animation callback never fires, recover after 900ms
     const safetyTimer = setTimeout(() => {
-      setLocalDiscount(target);
-      setLocalIndex(targetIndex);
-      resetSlideState(target);
-    }, 800);
+      isTransitioningRef.current = false;
+      slideX.setValue(0);
+      inSlideX.setValue(SCREEN_W);
+      setIncomingDiscount(null);
+    }, 900);
 
+    // Same easing on both panels → zero gap throughout transition (no background flash)
     Animated.parallel([
       Animated.timing(slideX, {
         toValue: dir === 'next' ? -SCREEN_W : SCREEN_W,
         duration: 260,
-        easing: Easing.in(Easing.cubic),
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(inSlideX, {
@@ -371,14 +415,46 @@ export default function DetailScreen({ route }: Props) {
       }),
     ]).start(({ finished }) => {
       clearTimeout(safetyTimer);
+      isTransitioningRef.current = false;
+      if (!finished) {
+        // Interrupted — reset immediately, don't commit state change
+        slideX.setValue(0);
+        inSlideX.setValue(SCREEN_W);
+        setIncomingDiscount(null);
+        return;
+      }
+      // Positions reset in localIndex useEffect, AFTER React commits the new discount
+      postTransitionRef.current = true;
       setLocalDiscount(target);
       setLocalIndex(targetIndex);
-      resetSlideState(target);
     });
-  }, [routeList, localIndex, slideX, inSlideX, resetSlideState]);
+  // routeListRef/localIndexRef/setIncomingRef are stable refs — no deps needed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideX, inSlideX]);
 
   const navigateToDiscount = doSlide;
   doSlideRef.current = doSlide;
+
+  const loadMoreSimilar = useCallback(() => {
+    if (similarLoadingRef.current || !similarHasMore || !displayedCategory) return;
+    const catSnap = displayedCategory;
+    const idSnap = currentDiscountIdForView;
+    similarLoadingRef.current = true;
+    setSimilarLoading(true);
+    fetchDiscountsByCategory(catSnap, similarLastVisible).then(({ discounts, lastVisible, hasMore }) => {
+      const filtered = discounts.filter(d => d.id !== idSnap);
+      setSimilarDiscounts(prev => {
+        const existingIds = new Set(prev.map(x => x.id));
+        return [...prev, ...filtered.filter(d => !existingIds.has(d.id))];
+      });
+      setSimilarLastVisible(lastVisible);
+      setSimilarHasMore(hasMore);
+    }).finally(() => {
+      setSimilarLoading(false);
+      similarLoadingRef.current = false;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [similarHasMore, similarLastVisible, displayedCategory, currentDiscountIdForView]);
 
   // Yatay kaydırma ile ilanlar arası geçiş
   const panResponder = useRef(
@@ -418,12 +494,13 @@ export default function DetailScreen({ route }: Props) {
           doSlideRef.current('prev');
         } else {
           setIncomingDiscount(null);
+          inSlideX.setValue(SCREEN_W);
           Animated.spring(slideX, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
-          Animated.spring(inSlideX, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
         }
       },
       onPanResponderTerminate: () => {
         setIncomingDiscount(null);
+        inSlideX.setValue(SCREEN_W);
         Animated.spring(slideX, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
       },
     })
@@ -516,24 +593,19 @@ export default function DetailScreen({ route }: Props) {
         style={[styles.swipeWrapper, { backgroundColor: bg, transform: [{ translateX: slideX }] }]}
         {...panResponder.panHandlers}
       >
-        {/* Sabit üst bar — scroll edilmez */}
-        <View style={[styles.topBar, { paddingTop: insets.top, backgroundColor: bg }]}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Text style={{ fontSize: 22, color: Colors.orange, fontWeight: '700' }}>←</Text>
-          </TouchableOpacity>
-          {routeList && currentIndex >= 0 && (
-            <Text style={{ color: isDark ? Colors.gray500 : Colors.gray400, fontSize: 12, fontWeight: '600' }}>
-              {currentIndex + 1} / {routeList.length}
-            </Text>
-          )}
-        </View>
-
         <ScrollView
           style={[styles.container, { backgroundColor: bg }]}
           contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={300}
+          onScroll={({ nativeEvent }) => {
+            const { contentOffset, layoutMeasurement, contentSize } = nativeEvent;
+            if (contentOffset.y + layoutMeasurement.height >= contentSize.height - 500) {
+              loadMoreSimilar();
+            }
+          }}
         >
-        <View style={{ padding: 12, gap: 10 }}>
+        <View style={{ padding: 12, paddingTop: insets.top + 8, gap: 10 }}>
           {/* Hero image */}
           <TouchableOpacity
             style={styles.heroContainer}
@@ -593,7 +665,7 @@ export default function DetailScreen({ route }: Props) {
             {
               backgroundColor: isDark ? '#1e2c3a' : '#f5f8ff',
               opacity: titleAnim,
-              transform: [{ translateY: titleAnim.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+              transform: [{ translateY: titleAnim.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }],
             },
           ]}>
             <View style={styles.titleRowTop}>
@@ -603,11 +675,10 @@ export default function DetailScreen({ route }: Props) {
               <Text style={[styles.brandText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>{d.brand}</Text>
             </View>
             <Text style={[styles.discountTitle, { color: textColor }]}>{d.title}</Text>
-            {viewCount !== null && (
-              <Text style={[styles.viewCountText, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
-                👁 Bugün {viewCount.toLocaleString('tr-TR')} kişi inceledi
-              </Text>
-            )}
+            {/* Her zaman render — async viewCount gelince layout şişmesini önler */}
+            <Text style={[styles.viewCountText, { color: isDark ? Colors.gray500 : Colors.gray400, opacity: viewCount !== null ? 1 : 0 }]}>
+              {viewCount !== null ? `👁 Bugün ${viewCount.toLocaleString('tr-TR')} kişi inceledi` : '👁'}
+            </Text>
             {isLowestPrice && !isAd && (
               <View style={styles.lowestPriceBadge}>
                 <Text style={{ color: Colors.white, fontSize: 12, fontWeight: '800' }}>👑 EN UYGUN FİYAT</Text>
@@ -622,27 +693,36 @@ export default function DetailScreen({ route }: Props) {
               styles.priceCard,
               {
                 backgroundColor: isDark ? '#1a1a2e' : '#fff7f0',
+                borderTopColor: Colors.orange,
                 opacity: priceAnim,
-                transform: [{ translateY: priceAnim.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+                transform: [{ translateY: priceAnim.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }],
               },
             ]}>
-              <View style={styles.priceTopRow}>
-                <Text style={[styles.sadesceLabel, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>SADECE</Text>
+              {/* Başlık satırı */}
+              <View style={styles.priceHeaderRow}>
+                <Text style={[styles.priceHeaderLabel, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
+                  GÜNCEL FİYAT
+                </Text>
                 {discountPercentage > 0 && (
-                  <View style={styles.percentBadge}>
-                    <Text style={styles.percentBadgeText}>-%{discountPercentage}</Text>
+                  <View style={[styles.pricePctBadge, { backgroundColor: isHotDeal ? Colors.red500 : Colors.orange }]}>
+                    <Text style={styles.pricePctText}>{isHotDeal ? '🔥 ' : ''}%{discountPercentage} İndirim</Text>
                   </View>
                 )}
               </View>
-              <View style={styles.priceRow}>
-                <View style={styles.mainPriceRow}>
+
+              {/* Ana fiyat alanı */}
+              <View style={styles.priceMainRow}>
+                <View style={styles.newPriceGroup}>
                   <Text style={[styles.mainPrice, { color: Colors.orange }]}>
                     {d.newPrice.toLocaleString('tr-TR')}
                   </Text>
                   <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
                 </View>
                 {d.oldPrice > 0 && (
-                  <View style={styles.oldPriceCol}>
+                  <View style={styles.oldPriceGroup}>
+                    <Text style={[styles.oldPriceSmallLabel, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>
+                      Önceki fiyat
+                    </Text>
                     <Text style={[styles.oldPrice, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
                       {d.oldPrice.toLocaleString('tr-TR')} TL
                     </Text>
@@ -655,13 +735,19 @@ export default function DetailScreen({ route }: Props) {
                         },
                       ]}>
                         <Text style={[styles.savingsPillText, { color: isDark ? Colors.green400 : Colors.green500 }]}>
-                          💚 {savings.toLocaleString('tr-TR')} TL ucuz
+                          💚 {savings.toLocaleString('tr-TR')} TL tasarruf
                         </Text>
                       </View>
                     )}
                   </View>
                 )}
               </View>
+
+              {/* Alt çizgi + dipnot */}
+              <View style={[styles.priceDivider, { backgroundColor: isDark ? Colors.gray700 : Colors.orange + '25' }]} />
+              <Text style={[styles.priceFooterNote, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>
+                ⏱ Fiyat değişkenlik gösterebilir{timeAgoStr(d.createdAt) ? ` · ${timeAgoStr(d.createdAt)} eklendi` : ''}
+              </Text>
             </Animated.View>
           )}
 
@@ -674,6 +760,7 @@ export default function DetailScreen({ route }: Props) {
               unitId={BANNER_AD_UNIT_ID}
               size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
               requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+              onAdFailedToLoad={() => {/* sessizce geç — UI kırılmasın */}}
             />
           </View>
 
@@ -794,7 +881,7 @@ export default function DetailScreen({ route }: Props) {
           </View>
 
           {/* Similar discounts */}
-          {similarDiscounts.length > 0 && (
+          {(similarDiscounts.length > 0 || similarLoading) && (
             <View>
               <Text style={[styles.similarTitle, { color: isDark ? Colors.gray200 : Colors.gray700 }]}>🛍️ Benzer Fırsatlar</Text>
               <View style={styles.similarGrid}>
@@ -816,62 +903,97 @@ export default function DetailScreen({ route }: Props) {
                   </View>
                 ))}
               </View>
+              {similarLoading && (
+                <ActivityIndicator
+                  size="small"
+                  color={Colors.orange}
+                  style={{ marginTop: 12, marginBottom: 4 }}
+                />
+              )}
             </View>
           )}
         </View>
         </ScrollView>
       </Animated.View>
 
-      {/* Incoming discount overlay — slides in during swipe transition */}
-      {incomingDiscount && (
-        <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: bg, transform: [{ translateX: inSlideX }] },
-          ]}
-          pointerEvents="none"
-        >
-          <View style={{ paddingTop: insets.top + 50, padding: 12, gap: 10 }}>
-            {/* Hero image preview */}
-            <View style={styles.heroContainer}>
-              <Image
-                source={{ uri: incomingDiscount.imageUrl }}
-                style={StyleSheet.absoluteFill}
-                blurRadius={20}
-              />
-              <OptimizedImage
-                src={incomingDiscount.imageUrl}
-                alt={incomingDiscount.title}
-                containerStyle={styles.heroInner}
-                resizeMode="contain"
-              />
-            </View>
-
-            {/* Title preview */}
-            <View style={[styles.card, { backgroundColor: isDark ? '#1e2c3a' : '#f5f8ff' }]}>
-              <Text style={[styles.discountTitle, { color: textColor }]} numberOfLines={2}>
-                {incomingDiscount.title}
-              </Text>
-            </View>
-
-            {/* Price preview */}
-            {incomingDiscount.newPrice > 0 && (
-              <View style={[styles.card, styles.priceCard, { backgroundColor: isDark ? '#1a1a2e' : '#fff7f0' }]}>
-                <View style={styles.mainPriceRow}>
-                  <Text style={[styles.mainPrice, { color: Colors.orange }]}>{incomingDiscount.newPrice.toLocaleString('tr-TR')}</Text>
-                  <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
-                </View>
+      {/* Incoming discount overlay — always mounted to avoid 1-frame flash on conditional mount with useNativeDriver */}
+      {(() => {
+        const inc = incomingDiscount ?? d;
+        return (
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: bg, transform: [{ translateX: inSlideX }] },
+            ]}
+            pointerEvents="none"
+          >
+            <View style={{ padding: 12, paddingTop: insets.top + 8, gap: 10 }}>
+              {/* Hero image preview */}
+              <View style={styles.heroContainer}>
+                <Image
+                  source={{ uri: inc.imageUrl }}
+                  style={StyleSheet.absoluteFill}
+                  blurRadius={20}
+                />
+                <OptimizedImage
+                  src={inc.imageUrl}
+                  alt={inc.title}
+                  containerStyle={styles.heroInner}
+                  resizeMode="contain"
+                />
               </View>
-            )}
-          </View>
-        </Animated.View>
-      )}
+
+              {/* Title preview */}
+              <View style={[styles.card, { backgroundColor: isDark ? '#1e2c3a' : '#f5f8ff' }]}>
+                <View style={styles.titleRowTop}>
+                  <View style={[styles.catBadge, { backgroundColor: isDark ? Colors.orange + '33' : Colors.orange + '22' }]}>
+                    <Text style={[styles.catBadgeText, { color: Colors.orange }]}>{inc.category}</Text>
+                  </View>
+                  <Text style={[styles.brandText, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>{inc.brand}</Text>
+                </View>
+                <Text style={[styles.discountTitle, { color: textColor }]} numberOfLines={2}>
+                  {inc.title}
+                </Text>
+                <Text style={[styles.viewCountText, { opacity: 0 }]}>👁</Text>
+              </View>
+
+              {/* Price preview */}
+              {inc.newPrice > 0 && (
+                <View style={[styles.card, styles.priceCard, { backgroundColor: isDark ? '#1a1a2e' : '#fff7f0', borderTopColor: Colors.orange }]}>
+                  <View style={styles.priceHeaderRow}>
+                    <Text style={[styles.priceHeaderLabel, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>GÜNCEL FİYAT</Text>
+                  </View>
+                  <View style={styles.priceMainRow}>
+                    <View style={styles.newPriceGroup}>
+                      <Text style={[styles.mainPrice, { color: Colors.orange }]}>{inc.newPrice.toLocaleString('tr-TR')}</Text>
+                      <Text style={[styles.priceUnit, { color: Colors.orange }]}>TL</Text>
+                    </View>
+                    {inc.oldPrice > 0 && (
+                      <View style={styles.oldPriceGroup}>
+                        <Text style={[styles.oldPriceSmallLabel, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>Önceki fiyat</Text>
+                        <Text style={[styles.oldPrice, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
+                          {inc.oldPrice.toLocaleString('tr-TR')} TL
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+            </View>
+          </Animated.View>
+        );
+      })()}
 
       {/* Lightbox modal */}
       <Modal
         visible={lightboxVisible}
         transparent
         animationType="fade"
+        onRequestClose={() => {
+          setLightboxVisible(false);
+          lbZoom.setValue(1);
+          lbZoomRef.current = 1;
+        }}
         onShow={() => { if (Platform.OS === 'android') NativeModules.NavigationBar?.setColor?.('#000000', false); }}
         onDismiss={() => {
           lbZoom.setValue(1); lbZoomRef.current = 1;
@@ -925,14 +1047,6 @@ const styles = StyleSheet.create({
   swipeWrapper: { flex: 1, overflow: 'hidden' },
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  backBtn: { padding: 4 },
   heroContainer: {
     height: 220,
     borderRadius: 20,
@@ -989,10 +1103,11 @@ const styles = StyleSheet.create({
     padding: 20,
     shadowColor: Colors.orange,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
-    gap: 12,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 5,
+    gap: 10,
+    borderTopWidth: 3,
   },
   titleRowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   catBadge: {
@@ -1010,16 +1125,17 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 20,
   },
-  priceTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sadesceLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' },
-  percentBadge: { backgroundColor: Colors.red500, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
-  percentBadgeText: { color: Colors.white, fontSize: 12, fontWeight: '800' },
-  priceRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
-  mainPriceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
+  priceHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  priceHeaderLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 2 },
+  pricePctBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  pricePctText: { color: Colors.white, fontSize: 12, fontWeight: '800' },
+  priceMainRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  newPriceGroup: { flexDirection: 'row', alignItems: 'flex-end', gap: 4 },
   mainPrice: { fontSize: 60, fontWeight: '900', lineHeight: 68 },
   priceUnit: { fontSize: 22, fontWeight: '700', marginBottom: 10 },
-  oldPriceCol: { alignItems: 'flex-end', gap: 6, marginBottom: 12 },
-  oldPrice: { textDecorationLine: 'line-through', fontSize: 16, fontWeight: '600' },
+  oldPriceGroup: { alignItems: 'flex-end', gap: 4, marginBottom: 10 },
+  oldPriceSmallLabel: { fontSize: 10, fontWeight: '600' },
+  oldPrice: { textDecorationLine: 'line-through', fontSize: 15, fontWeight: '600' },
   savingsPill: {
     borderRadius: 10,
     paddingHorizontal: 8,
@@ -1028,6 +1144,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   savingsPillText: { fontSize: 11, fontWeight: '700' },
+  priceDivider: { height: 1 },
+  priceFooterNote: { fontSize: 11, textAlign: 'center' },
   actionRow: { flexDirection: 'row', gap: 10 },
   actionBtn: {
     flex: 1,

@@ -10,12 +10,17 @@ import { getDiscountById } from '../services/firebaseService';
 import { getVotes, isDiscountExpired, Votes, loadVotesCache } from '../services/voteService';
 import type { Discount } from '../types';
 import DiscountCard from '../components/DiscountCard';
-import NativeAdCard, { nativeAdSupported } from '../components/NativeAdCard';
+import NativeAdCard from '../components/NativeAdCard';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
+
+// Favori nesnelerini AsyncStorage'a cache'le — her tab geçişinde Firebase'e gitme
+const FAV_OBJ_CACHE_KEY = 'indiva_fav_objs_v2';
+const FAV_FETCH_TTL     = 3 * 60 * 1000; // 3 dakika
+interface FavObjCache { ids: string[]; discounts: Discount[]; ts: number }
 
 type FavSlot = { kind: 'discount'; item: Discount } | { kind: 'ad'; adKey: string };
 type FavRow = { rowKey: string; left: FavSlot; right: FavSlot | null };
@@ -38,16 +43,59 @@ export default function FavoritesScreen() {
   const textColor = isDark ? Colors.white : Colors.gray800;
 
   const fetchFavorites = useCallback(async () => {
-    setIsLoading(true);
     setError(null);
     try {
       await loadVotesCache();
       setVotes(getVotes());
+
       const stored = await AsyncStorage.getItem('favoriteDiscounts');
       const ids: string[] = stored ? JSON.parse(stored) : [];
-      if (ids.length === 0) { setFavoriteDiscounts([]); return; }
+
+      if (ids.length === 0) {
+        setFavoriteDiscounts([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // ── Cache kontrolü ─────────────────────────────────────────────────────
+      const raw = await AsyncStorage.getItem(FAV_OBJ_CACHE_KEY);
+      if (raw) {
+        const cache: FavObjCache = JSON.parse(raw);
+        const sameIds = ids.length === cache.ids.length && ids.every(id => cache.ids.includes(id));
+        if (sameIds) {
+          // Aynı ID listesi → cache'i hemen göster
+          setFavoriteDiscounts(cache.discounts);
+          setIsLoading(false);
+          if (Date.now() - cache.ts < FAV_FETCH_TTL) return; // Taze: 0 Firebase read
+          // Bayat: içerik zaten gösteriliyor, sessizce arka planda yenile
+          const results = await Promise.all(ids.map(id => getDiscountById(id).catch(() => null)));
+          const all = results.filter((d): d is Discount => d !== null);
+          setFavoriteDiscounts(all);
+          await AsyncStorage.setItem(FAV_OBJ_CACHE_KEY, JSON.stringify({ ids, discounts: all, ts: Date.now() }));
+          return;
+        }
+        // Favori listesi değişmiş → yeni eklenenleri al, var olanları cache'den kullan
+        const cachedById = new Map(cache.discounts.map(d => [d.id, d]));
+        const newIds = ids.filter(id => !cachedById.has(id));
+        if (newIds.length > 0) {
+          setIsLoading(true);
+          const newDocs = await Promise.all(newIds.map(id => getDiscountById(id).catch(() => null)));
+          const all = ids
+            .map(id => cachedById.get(id) ?? newDocs.find(d => d?.id === id) ?? null)
+            .filter((d): d is Discount => d !== null);
+          setFavoriteDiscounts(all);
+          await AsyncStorage.setItem(FAV_OBJ_CACHE_KEY, JSON.stringify({ ids, discounts: all, ts: Date.now() }));
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Cache yok veya ID'ler tamamen farklı → tam fetch
+      setIsLoading(true);
       const results = await Promise.all(ids.map(id => getDiscountById(id).catch(() => null)));
-      setFavoriteDiscounts(results.filter((d): d is Discount => d !== null));
+      const all = results.filter((d): d is Discount => d !== null);
+      setFavoriteDiscounts(all);
+      await AsyncStorage.setItem(FAV_OBJ_CACHE_KEY, JSON.stringify({ ids, discounts: all, ts: Date.now() }));
     } catch {
       setError('Favoriler yüklenirken bir sorun oluştu.');
     } finally {
@@ -121,6 +169,7 @@ export default function FavoritesScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
+
       {error && (
         <View style={[styles.errorBox, { backgroundColor: isDark ? '#1f0a0a' : Colors.red50 }]}>
           <Text style={{ color: Colors.red500 }}>{error}</Text>
@@ -131,7 +180,7 @@ export default function FavoritesScreen() {
       )}
 
       {favoriteDiscounts.length === 0 && !error ? (
-        <View style={[styles.emptyContainer, { paddingTop: insets.top }]}>
+        <View style={styles.emptyContainer}>
           <View style={[styles.emptyIconBox, { backgroundColor: isDark ? Colors.gray800 : Colors.gray100 }]}>
             <Text style={{ fontSize: 40 }}>🤍</Text>
           </View>
@@ -152,24 +201,7 @@ export default function FavoritesScreen() {
           data={listItems}
           keyExtractor={item => item.rowKey}
           renderItem={renderItem}
-          contentContainerStyle={[styles.listContainer, { paddingTop: 8, paddingBottom: insets.bottom + 80 }]}
-          ListHeaderComponent={
-            <View style={[styles.listHeader, { paddingTop: insets.top + 4 }]}>
-              <View>
-                <Text style={[styles.listHeaderTitle, { color: isDark ? Colors.white : Colors.gray800 }]}>
-                  Favorilerim
-                </Text>
-                <Text style={[styles.listHeaderSub, { color: isDark ? Colors.gray400 : Colors.gray500 }]}>
-                  {favoriteDiscounts.length} kayıtlı fırsat
-                </Text>
-              </View>
-              <View style={[styles.countBadge, { backgroundColor: Colors.orange + '20', borderColor: Colors.orange + '40' }]}>
-                <Text style={[styles.countBadgeText, { color: Colors.orange }]}>
-                  {favoriteDiscounts.length}
-                </Text>
-              </View>
-            </View>
-          }
+          contentContainerStyle={[styles.listContainer, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 80 }]}
         />
       )}
     </View>
@@ -204,23 +236,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   exploreBtnText: { color: Colors.white, fontWeight: '700', fontSize: 15 },
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  headerTitle: { fontSize: 22, fontWeight: '900', letterSpacing: 0.3 },
   listContainer: { padding: 8 },
   row: { flexDirection: 'row', gap: 8, marginBottom: 8 },
   cardWrapper: { flex: 1 },
-  listHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-    paddingBottom: 14,
-  },
-  listHeaderTitle: { fontSize: 22, fontWeight: '900', letterSpacing: 0.3 },
-  listHeaderSub: { fontSize: 13, marginTop: 2 },
-  countBadge: {
-    borderRadius: 20,
-    borderWidth: 1.5,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  countBadgeText: { fontSize: 16, fontWeight: '900' },
 });
