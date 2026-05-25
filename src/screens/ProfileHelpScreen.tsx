@@ -16,7 +16,7 @@ export default function ProfileHelpScreen() {
     { q: 'İndirimler nasıl ekleniyor?', a: 'İndirimler hem otomatik tarama ile hem de topluluk üyelerinin gönderimleriyle eklenir. Her ilan ekibimiz tarafından incelenir.' },
     { q: 'Oy sistemi nasıl çalışır?', a: 'Her kullanıcı bir indirime "devam ediyor" veya "bitti" oyu verebilir. Çoğunluk "bitti" dediğinde ilan otomatik olarak feed\'den kaldırılır.' },
     { q: 'Favorilere nasıl eklerim?', a: 'İndirim kartındaki kalp ikonuna dokunarak o fırsatı favorilere ekleyebilirsiniz. Favorilerim sekmesinden hepsini görebilirsiniz.' },
-    { q: 'Sorun bildirmek istiyorum', a: 'Herhangi bir sorun veya öneriniz için indiva.app@gmail.com adresine e-posta gönderebilirsiniz.' },
+    { q: 'Sorun bildirmek istiyorum', a: 'Herhangi bir sorun veya öneriniz için indivaapp@gmail.com adresine e-posta gönderebilirsiniz.' },
   ];
 
   return (
@@ -32,7 +32,7 @@ export default function ProfileHelpScreen() {
       ))}
       <View style={styles.contactBox}>
         <Text style={{ color: Colors.orange, fontWeight: '700', fontSize: 14 }}>📧 İletişim</Text>
-        <Text style={{ color: bodyColor, fontSize: 13, marginTop: 4 }}>indiva.app@gmail.com</Text>
+        <Text style={{ color: bodyColor, fontSize: 13, marginTop: 4 }}>indivaapp@gmail.com</Text>
       </View>
     </ScrollView>
   );

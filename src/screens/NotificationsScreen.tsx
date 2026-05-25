@@ -10,6 +10,7 @@ import {
   getNotifications, markAllAsRead, deleteNotification,
   deleteAllNotifications,
 } from '../services/notificationService';
+import { fetchStoriesCached } from '../services/firebaseService';
 import type { Notification } from '../types';
 import { Colors } from '../constants/colors';
 import BackButton from '../components/BackButton';
@@ -142,7 +143,7 @@ function SwipeableNotification({
           </View>
 
           {/* Chevron if tappable */}
-          {notification.discountId ? (
+          {(notification.discountId || notification.storyId) ? (
             <Text style={[styles.chevron, { color: isDark ? Colors.gray600 : Colors.gray300 }]}>›</Text>
           ) : null}
         </TouchableOpacity>
@@ -173,9 +174,15 @@ export default function NotificationsScreen() {
     setNotifications(updated);
   };
 
-  const handlePress = (notif: Notification) => {
+  const handlePress = async (notif: Notification) => {
     if (notif.discountId) {
       navigation.navigate('Detail', { id: notif.discountId });
+    } else if (notif.storyId) {
+      try {
+        const stories = await fetchStoriesCached();
+        const idx = stories.findIndex(s => s.id === notif.storyId);
+        if (idx >= 0) navigation.navigate('StoryDetail', { stories, initialIndex: idx });
+      } catch {}
     }
   };
 

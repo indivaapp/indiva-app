@@ -55,6 +55,9 @@ export default function ProfileScreen() {
   const [congratsBadge, setCongratsBadge] = useState<Badge | null>(null);
 
   const scrollRef = useRef<any>(null);
+  const lastStatsFetchRef = useRef(0);
+  const STATS_TTL = 30_000; // 30 saniye içinde tekrar gelirse Firebase'e gitme
+
   useScrollToTop(scrollRef);
   useFocusEffect(useCallback(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -95,6 +98,9 @@ export default function ProfileScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
+    const now = Date.now();
+    if (now - lastStatsFetchRef.current < STATS_TTL) return;
+    lastStatsFetchRef.current = now;
     loadVotesCache()
       .then(() => getContributionStats().then(refreshStats).catch(() => {}))
       .catch(() => {});
@@ -132,17 +138,27 @@ export default function ProfileScreen() {
 
   const handleUnlockPress = () => {
     if (!stats?.pendingRankUp) return;
-    const tier = stats.pendingRankUp;
-    const unsubClosed = rankInterstitial.addAdEventListener(AdEventType.CLOSED, () => {
-      unsubClosed();
-      rankInterstitial.load();
-      claimRankUp(tier);
-    });
+    // Rozeti hemen aç — reklam "Devam Et" sonrasında gösterilecek
+    claimRankUp(stats.pendingRankUp);
+  };
+
+  // Tebrik modalı "Devam Et" → modal kapat → SONRA interstitial göster
+  // "Görevin tamamlanması sonrası" = AdMob uyumlu doğal durak noktası
+  const handleCongratsClose = () => {
+    setCongratsBadge(null);
     if (rankInterstitial.loaded) {
-      rankInterstitial.show().catch(() => { unsubClosed(); claimRankUp(tier); });
-    } else {
-      unsubClosed();
-      claimRankUp(tier);
+      // Kısa gecikme: modal kapanma animasyonu bitmeden reklam açılmasın
+      setTimeout(() => {
+        // Önce listener, sonra show — CLOSED event kaçmasın
+        const unsub = rankInterstitial.addAdEventListener(AdEventType.CLOSED, () => {
+          unsub();
+          rankInterstitial.load(); // bir sonraki rozet için önceden yükle
+        });
+        rankInterstitial.show().catch(() => {
+          unsub();
+          rankInterstitial.load(); // gösterim başarısızsa da yeniden yükle
+        });
+      }, 350);
     }
   };
 
@@ -445,7 +461,7 @@ export default function ProfileScreen() {
 
               <TouchableOpacity
                 style={styles.modalBtn}
-                onPress={() => setCongratsBadge(null)}
+                onPress={handleCongratsClose}
               >
                 <Text style={styles.modalBtnText}>Harika! Devam Et →</Text>
               </TouchableOpacity>

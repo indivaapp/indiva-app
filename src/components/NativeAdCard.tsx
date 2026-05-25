@@ -3,6 +3,7 @@ import { View, Text, Image, StyleSheet, type StyleProp, type ViewStyle } from 'r
 import { NativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
+import { useAdsReady } from '../../App';
 
 // ─── Ad Unit ID ───────────────────────────────────────────────────────────────
 const NATIVE_AD_UNIT_ID = __DEV__
@@ -31,11 +32,15 @@ function NativeAdCardInner({
 }) {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
+  const adsReady = useAdsReady();
   const [nativeAd, setNativeAd] = useState<NativeAd | null>(null);
   const [failed, setFailed] = useState(false);
   const adRef = useRef<NativeAd | null>(null);
 
   useEffect(() => {
+    // MobileAds.initialize() tamamlanmadan istek atma — race condition
+    if (!adsReady) return;
+
     let cancelled = false;
 
     NativeAd.createForAdRequest(NATIVE_AD_UNIT_ID, {
@@ -58,7 +63,7 @@ function NativeAdCardInner({
       adRef.current?.destroy();
       adRef.current = null;
     };
-  }, []);
+  }, [adsReady]);
 
   // ── Compact (grid) modu — iskelet placeholder ─────────────────────────────
   if (compact && !nativeAd) {
@@ -91,11 +96,7 @@ function NativeAdCardInner({
     const bodyColor = isDark ? Colors.gray400 : Colors.gray500;
 
     return (
-      <View
-        style={[styles.compactWrapper, style]}
-        onStartShouldSetResponder={() => true}
-        onMoveShouldSetResponder={() => true}
-      >
+      <View style={[styles.compactWrapper, style]}>
         <NativeAdView
           nativeAd={nativeAd}
           style={[styles.compactCard, { backgroundColor: cardBg }]}
@@ -154,10 +155,7 @@ function NativeAdCardInner({
 
   // ── Tam genişlik modu (varsayılan) ─────────────────────────────────────────
   return (
-    <View
-      onStartShouldSetResponder={() => true}
-      onMoveShouldSetResponder={() => true}
-    >
+    <View>
       <NativeAdView
         nativeAd={nativeAd}
         style={[
@@ -259,7 +257,7 @@ const styles = StyleSheet.create({
   },
   compactAdBadgeText: {
     color: '#fff',
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
@@ -342,7 +340,7 @@ const styles = StyleSheet.create({
   },
   adLabelText: {
     color: '#fff',
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
   },

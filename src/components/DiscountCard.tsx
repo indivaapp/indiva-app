@@ -42,9 +42,11 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
   const [countdown, setCountdown] = useState<string | null>(null);
   const [isHidden, setIsHidden] = useState(false);
   const heartScale = useRef(new Animated.Value(1)).current;
+  const heartMounted = useRef(false);
 
-  // Kalp bounce animasyonu — favori durumu her değiştiğinde tetiklenir
+  // Kalp bounce animasyonu — sadece favori durumu DEĞİŞTİĞİNDE tetiklenir (mount'ta değil)
   useEffect(() => {
+    if (!heartMounted.current) { heartMounted.current = true; return; }
     Animated.sequence([
       Animated.spring(heartScale, {
         toValue: 1.5,
@@ -206,6 +208,7 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
         <OptimizedImage
           src={discount.imageUrl}
           alt={discount.title}
+          isDark={isDark}
           containerStyle={StyleSheet.absoluteFill}
           resizeMode="cover"
         />

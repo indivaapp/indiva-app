@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { StatusBar, StyleSheet, NativeModules, Platform, Animated, Alert } from 'react-native';
 
 // Global JS hata yakalayıcı — uygulamanın sessizce kapanmasını önler
@@ -21,7 +21,7 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { Colors } from './src/constants/colors';
 import RootNavigator from './src/navigation';
 import SplashScreen from './src/components/SplashScreen';
-import MobileAds from 'react-native-google-mobile-ads';
+import MobileAds, { TestIds } from 'react-native-google-mobile-ads';
 import {
   loadVotesCache,
 } from './src/services/voteService';
@@ -40,12 +40,19 @@ import { navigationRef } from './src/navigation/navigationRef';
 
 const { NavigationBar } = NativeModules;
 
+// ─── Ads Ready Context ────────────────────────────────────────────────────────
+// NativeAdCard ve diğer reklam bileşenleri bu context'i okur.
+// initialize() tamamlanmadan önce reklam isteği atılmasını engeller.
+export const AdsReadyContext = createContext(false);
+export function useAdsReady() { return useContext(AdsReadyContext); }
+
 function AppContent() {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
   const [splashVisible, setSplashVisible] = useState(true);
   const splashOpacity = useRef(new Animated.Value(1)).current;
   const [notificationCount, setNotificationCount] = useState(0);
+  const [adsReady, setAdsReady] = useState(false);
 
   // Sync Android system navigation bar color with app theme
   useEffect(() => {
@@ -59,11 +66,20 @@ function AppContent() {
 
   useEffect(() => {
     // Load caches, then hide splash
+    // Hash almak için: adb logcat | grep "Use RequestConfiguration"
+    // Çıkan satırdaki hex string'i TEST_DEVICE_HASH'a ekle
+    // TEST BUILD: cihaz hash'i her zaman dahil — release'de de test reklamları gelir.
+    // Üretim sürümünde __DEV__ koşuluna geri döndürülecek.
+    const TEST_DEVICE_HASHES: string[] = ['EMULATOR', '03731AD40F3E5BDD714AD4BDB10BE0F4'];
     MobileAds()
-      // Test cihazı hash'ini logcat'ten öğren:
-      // I/Ads: Use RequestConfiguration.Builder().setTestDeviceIds(Arrays.asList("BURAYA_HASH"))
-      .setRequestConfiguration({ testDeviceIdentifiers: ['EMULATOR'] })
-      .then(() => Promise.all([loadVotesCache(), loadNotificationsCache(), MobileAds().initialize()]))
+      .setRequestConfiguration({ testDeviceIdentifiers: TEST_DEVICE_HASHES })
+      .then(() => MobileAds().initialize())
+      .then(() => {
+        // initialize() garantili tamamlandıktan sonra işaretle.
+        // Reklam bileşenleri bu flag'i bekler — race condition'ı engeller.
+        setAdsReady(true);
+        return Promise.all([loadVotesCache(), loadNotificationsCache()]);
+      })
       .finally(() => {
         setNotificationCount(getNotificationCount());
         setTimeout(() => {
@@ -75,8 +91,10 @@ function AppContent() {
         }, 1400);
       });
 
-    // Push notifications
-    setupPushNotifications();
+    // Push notifications — hata olursa uygulama çökmemeli
+    setupPushNotifications().catch(err => {
+      if (__DEV__) console.warn('[PushNotification] setup failed:', err);
+    });
     const unsubFCM = onMessageListener(() => {
       setNotificationCount(getNotificationCount());
     });
@@ -93,18 +111,20 @@ function AppContent() {
   }, []);
 
   return (
-    <NavigationContainer ref={navigationRef} onReady={handlePendingNotification}>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={isDark ? Colors.gray900 : Colors.white}
-      />
-      <RootNavigator notificationCount={notificationCount} />
-      {splashVisible && (
-        <Animated.View style={[StyleSheet.absoluteFill, { opacity: splashOpacity }]}>
-          <SplashScreen />
-        </Animated.View>
-      )}
-    </NavigationContainer>
+    <AdsReadyContext.Provider value={adsReady}>
+      <NavigationContainer ref={navigationRef} onReady={handlePendingNotification}>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor={isDark ? Colors.gray900 : Colors.white}
+        />
+        <RootNavigator notificationCount={notificationCount} />
+        {splashVisible && (
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: splashOpacity }]}>
+            <SplashScreen />
+          </Animated.View>
+        )}
+      </NavigationContainer>
+    </AdsReadyContext.Provider>
   );
 }
 

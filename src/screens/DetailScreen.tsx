@@ -22,7 +22,6 @@ import {
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 import NativeAdCard from '../components/NativeAdCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -44,9 +43,6 @@ const { width: SCREEN_W } = Dimensions.get('window');
 // Oturum içi bellek cache — AsyncStorage okumalarını geçiş başına bir kez sınırlar
 const _vcCache = new Map<string, { firstViewedAt: number; localViews: number }>();
 
-const BANNER_AD_UNIT_ID = __DEV__
-  ? TestIds.ADAPTIVE_BANNER
-  : 'ca-app-pub-3675503435035155/8261572668';
 
 const getFavoriteIds = async (): Promise<string[]> => {
   try {
@@ -107,8 +103,6 @@ export default function DetailScreen({ route }: Props) {
   const [userVoted, setUserVoted] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
-  const [bannerLoaded, setBannerLoaded] = useState(false);
-  const [bannerFailed, setBannerFailed] = useState(false);
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [expireCountdown, setExpireCountdown] = useState('');
 
@@ -186,16 +180,16 @@ export default function DetailScreen({ route }: Props) {
   const doSlideRef = useRef<(dir: 'prev' | 'next') => void>(() => {});
   const setIncomingRef = useRef(setIncomingDiscount);
   const routeListRef = useRef(routeList);
+  const incomingDiscountRef = useRef<Discount | null>(null);
   localIndexRef.current = localIndex;
   setIncomingRef.current = setIncomingDiscount;
   routeListRef.current = routeList;
+  incomingDiscountRef.current = incomingDiscount;
 
   // Transition guard — prevents overlapping animations
   const isTransitioningRef = useRef(false);
-  // postTransitionRef: set true in animation callback; positions reset in useEffect
-  // AFTER React commits the new localIndex (same pattern as InfluencerStoryDetailScreen).
-  // Eliminates the race where slideX.setValue(0) fires before React renders new content.
   const postTransitionRef = useRef(false);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
   const cardBg = isDark ? Colors.gray800 : Colors.white;
@@ -290,20 +284,25 @@ export default function DetailScreen({ route }: Props) {
     if (!currentDiscountIdForView || !displayedCategory) return;
     const targetId = currentDiscountIdForView;
     const targetCat = displayedCategory;
-    setSimilarDiscounts([]);
+
+    // Mevcut listeyi hemen filtrele — geçiş sırasında flash olmaz ([] ile silme yok)
+    setSimilarDiscounts(prev => prev.filter(d => d.id !== targetId));
     setSimilarLastVisible(null);
     setSimilarHasMore(false);
-    setSimilarLoading(true);
     similarLoadingRef.current = true;
-    fetchDiscountsByCategoryCached(targetCat, null).then(({ discounts, lastVisible, hasMore }) => {
-      const filtered = discounts.filter(d => d.id !== targetId);
-      setSimilarDiscounts(filtered);
-      setSimilarLastVisible(lastVisible);
-      setSimilarHasMore(hasMore);
-    }).finally(() => {
-      setSimilarLoading(false);
-      similarLoadingRef.current = false;
-    });
+
+    // Cache'den çek (session/persistent cache varsa anında döner, spinner gerekmez)
+    fetchDiscountsByCategoryCached(targetCat, null)
+      .then(({ discounts, lastVisible, hasMore }) => {
+        setSimilarDiscounts(discounts.filter(d => d.id !== targetId));
+        setSimilarLastVisible(lastVisible);
+        setSimilarHasMore(hasMore);
+      })
+      .catch(() => {})
+      .finally(() => {
+        similarLoadingRef.current = false;
+        setSimilarLoading(false);
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDiscountIdForView, displayedCategory]);
 
@@ -379,6 +378,10 @@ export default function DetailScreen({ route }: Props) {
       inSlideX.setValue(SCREEN_W);
       titleAnim.setValue(1);
       priceAnim.setValue(1);
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+      // Geçiş tamamlandı — içeriği temizle. Bir sonraki gesture başladığında
+      // incomingDiscountRef.current null olacak, inSlideX content commit olmadan hareket etmeyecek.
+      setIncomingDiscount(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localIndex]);
@@ -400,6 +403,12 @@ export default function DetailScreen({ route }: Props) {
 
     // Incoming panel already positioned by gesture; just ensure correct content
     setIncomingRef.current(prev => (prev?.id === target.id ? prev : target));
+
+    // İçerik gesture sırasında commit olmamışsa inSlideX'i doğru tarafa konumlandır.
+    // (Hızlı swipe'larda ref guard, inSlideX'i hareket ettirmemiş olabilir.)
+    if (incomingDiscountRef.current?.id !== target.id) {
+      inSlideX.setValue(dir === 'next' ? SCREEN_W : -SCREEN_W);
+    }
 
     isTransitioningRef.current = true;
 
@@ -487,16 +496,21 @@ export default function DetailScreen({ route }: Props) {
         const hasN = list != null && idx < (list.length - 1);
         const hasP = idx > 0;
         if (gs.dx < 0 && hasN) {
-          // Show incoming preview if not already set
           const nextItem = list![idx + 1];
           setIncomingRef.current(prev => prev?.id === nextItem.id ? prev : nextItem);
           slideX.setValue(gs.dx * 0.7);
-          inSlideX.setValue(SCREEN_W + gs.dx * 0.7);
+          // inSlideX'i ancak doğru içerik commit olduktan sonra hareket ettir.
+          // commit olmadan hareket ederse önceki ürünün içeriği 1 frame görünür (flash).
+          if (incomingDiscountRef.current?.id === nextItem.id) {
+            inSlideX.setValue(SCREEN_W + gs.dx * 0.7);
+          }
         } else if (gs.dx > 0 && hasP) {
           const prevItem = list![idx - 1];
           setIncomingRef.current(prev => prev?.id === prevItem.id ? prev : prevItem);
           slideX.setValue(gs.dx * 0.7);
-          inSlideX.setValue(-SCREEN_W + gs.dx * 0.7);
+          if (incomingDiscountRef.current?.id === prevItem.id) {
+            inSlideX.setValue(-SCREEN_W + gs.dx * 0.7);
+          }
         }
       },
       onPanResponderRelease: (_, gs) => {
@@ -620,6 +634,7 @@ export default function DetailScreen({ route }: Props) {
         {...panResponder.panHandlers}
       >
         <ScrollView
+          ref={scrollViewRef}
           style={[styles.container, { backgroundColor: bg }]}
           contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
           showsVerticalScrollIndicator={false}
@@ -647,6 +662,7 @@ export default function DetailScreen({ route }: Props) {
             <OptimizedImage
               src={d.imageUrl}
               alt={d.title}
+              isDark={isDark}
               containerStyle={styles.heroInner}
               resizeMode="contain"
             />
@@ -786,18 +802,6 @@ export default function DetailScreen({ route }: Props) {
             </Animated.View>
           )}
 
-          {/* Banner reklam — yüklenene/fail edene kadar alan kaplamaz */}
-          {!bannerFailed && (
-            <View style={bannerLoaded ? undefined : { height: 0, overflow: 'hidden' }}>
-              <BannerAd
-                unitId={BANNER_AD_UNIT_ID}
-                size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-                requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-                onAdLoaded={() => setBannerLoaded(true)}
-                onAdFailedToLoad={() => setBannerFailed(true)}
-              />
-            </View>
-          )}
 
           {/* Favorite + Share */}
           <View style={styles.actionRow}>
@@ -953,7 +957,7 @@ export default function DetailScreen({ route }: Props) {
 
       {/* Incoming discount overlay — always mounted to avoid 1-frame flash on conditional mount with useNativeDriver */}
       {(() => {
-        const inc = incomingDiscount ?? d;
+        const inc = incomingDiscount;
         return (
           <Animated.View
             style={[
@@ -962,7 +966,7 @@ export default function DetailScreen({ route }: Props) {
             ]}
             pointerEvents="none"
           >
-            <View style={{ padding: 12, paddingTop: insets.top + 8, gap: 10 }}>
+            {inc && <View style={{ padding: 12, paddingTop: insets.top + 8, gap: 10 }}>
               {/* Hero image preview */}
               <View style={styles.heroContainer}>
                 <Image
@@ -973,6 +977,7 @@ export default function DetailScreen({ route }: Props) {
                 <OptimizedImage
                   src={inc.imageUrl}
                   alt={inc.title}
+                  isDark={isDark}
                   containerStyle={styles.heroInner}
                   resizeMode="contain"
                 />
@@ -1144,7 +1149,7 @@ export default function DetailScreen({ route }: Props) {
                   </>
                 );
               })()}
-            </View>
+            </View>}
           </Animated.View>
         );
       })()}

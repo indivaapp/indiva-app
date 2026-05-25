@@ -158,6 +158,7 @@ function StoryItem({
               {story.productImage ? (
                 <OptimizedImage
                   src={story.productImage}
+                  isDark={isDark}
                   containerStyle={styles.avatarWrap}
                   resizeMode="cover"
                 />
@@ -176,6 +177,7 @@ function StoryItem({
                 {story.productImage ? (
                   <OptimizedImage
                     src={story.productImage}
+                    isDark={isDark}
                     containerStyle={styles.avatarWrap}
                     resizeMode="cover"
                   />

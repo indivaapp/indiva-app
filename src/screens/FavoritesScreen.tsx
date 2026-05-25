@@ -19,7 +19,7 @@ type NavProp = NativeStackNavigationProp<RootStackParamList>;
 
 // Favori nesnelerini AsyncStorage'a cache'le — her tab geçişinde Firebase'e gitme
 const FAV_OBJ_CACHE_KEY = 'indiva_fav_objs_v2';
-const FAV_FETCH_TTL     = 3 * 60 * 1000; // 3 dakika
+const FAV_FETCH_TTL     = 20 * 60 * 1000; // 20 dakika
 interface FavObjCache { ids: string[]; discounts: Discount[]; ts: number }
 
 type FavSlot = { kind: 'discount'; item: Discount } | { kind: 'ad'; adKey: string };
@@ -130,7 +130,7 @@ export default function FavoritesScreen() {
     return rows;
   }, [favoriteDiscounts]);
 
-  const renderSlot = (slot: FavSlot | null) => {
+  const renderSlot = useCallback((slot: FavSlot | null) => {
     if (!slot) return <View style={styles.cardWrapper} />;
     if (slot.kind === 'ad') {
       return (
@@ -150,14 +150,15 @@ export default function FavoritesScreen() {
         />
       </View>
     );
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [votes, favoriteDiscounts]);
 
-  const renderItem = ({ item }: { item: FavRow }) => (
+  const renderItem = useCallback(({ item }: { item: FavRow }) => (
     <View style={styles.row}>
       {renderSlot(item.left)}
       {renderSlot(item.right)}
     </View>
-  );
+  ), [renderSlot]);
 
   if (isLoading) {
     return (
@@ -201,6 +202,11 @@ export default function FavoritesScreen() {
           data={listItems}
           keyExtractor={item => item.rowKey}
           renderItem={renderItem}
+          removeClippedSubviews={true}
+          windowSize={5}
+          maxToRenderPerBatch={4}
+          initialNumToRender={4}
+          updateCellsBatchingPeriod={30}
           contentContainerStyle={[styles.listContainer, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 80 }]}
         />
       )}

@@ -39,7 +39,7 @@ export default function ProfilePrivacyScreen() {
 
       <Text style={[styles.heading, { color: isDark ? Colors.white : Colors.gray800 }]}>4. İletişim</Text>
       <Text style={[styles.body, { color: textColor }]}>
-        Gizlilik politikamız hakkında sorularınız için: indiva.app@gmail.com
+        Gizlilik politikamız hakkında sorularınız için: indivaapp@gmail.com
       </Text>
 
       <Text style={[styles.footer, { color: Colors.gray400 }]}>Son güncelleme: Nisan 2026</Text>

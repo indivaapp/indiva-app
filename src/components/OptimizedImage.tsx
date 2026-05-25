@@ -2,18 +2,17 @@ import React, { useState } from 'react';
 import {
   View,
   Image,
-  ActivityIndicator,
   StyleSheet,
   ImageStyle,
   ViewStyle,
   Text,
 } from 'react-native';
 import { Colors } from '../constants/colors';
-import { useTheme } from '../context/ThemeContext';
 
 interface OptimizedImageProps {
   src?: string;
   alt?: string;
+  isDark?: boolean;
   style?: ImageStyle;
   containerStyle?: ViewStyle;
   resizeMode?: 'cover' | 'contain' | 'stretch' | 'repeat' | 'center';
@@ -22,14 +21,13 @@ interface OptimizedImageProps {
 const OptimizedImage: React.FC<OptimizedImageProps> = ({
   src,
   alt,
+  isDark = false,
   style,
   containerStyle,
   resizeMode = 'cover',
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
-  const { effectiveTheme } = useTheme();
-  const isDark = effectiveTheme === 'dark';
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -37,12 +35,9 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
         <View
           style={[
             StyleSheet.absoluteFill,
-            styles.skeleton,
             { backgroundColor: isDark ? Colors.gray700 : Colors.gray200 },
           ]}
-        >
-          <ActivityIndicator color={Colors.orange} size="small" />
-        </View>
+        />
       )}
 
       {hasError ? (
@@ -60,6 +55,7 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
           source={{ uri: src }}
           style={[StyleSheet.absoluteFill, { opacity: isLoaded ? 1 : 0 }, style]}
           resizeMode={resizeMode}
+          fadeDuration={0}
           onLoad={() => setIsLoaded(true)}
           onError={() => { setIsLoaded(true); setHasError(true); }}
           accessibilityLabel={alt}
@@ -77,10 +73,6 @@ const styles = StyleSheet.create({
   container: {
     overflow: 'hidden',
     backgroundColor: 'transparent',
-  },
-  skeleton: {
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   errorContainer: {
     flex: 1,

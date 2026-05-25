@@ -19,7 +19,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
+import SponsoredStoryCard from '../components/SponsoredStoryCard';
 import { Colors } from '../constants/colors';
 import { tsToMs } from '../utils/time';
 import type { RootStackParamList } from '../navigation';
@@ -32,17 +32,9 @@ const AUTO_ADVANCE_MS = 8000;
 const SWIPE_THRESHOLD = 60;
 const DISMISS_THRESHOLD = 100;
 const UP_SWIPE_THRESHOLD = 80;
-const AD_EVERY_N = 5;
 const LONG_PRESS_DELAY = 150;
-
-// ⚠️  ÖNEMLI: Bu unit ID Story ekranına özel bir Interstitial birimi olmalı.
-// AdMob konsolunda ayrı bir Interstitial unit oluşturup buraya ekle.
-// 8261572668 Banner unit'i — aynı ID'yi Interstitial olarak kullanmak AdMob
-// politikasına aykırıdır ve production'da reklam gösterilmez.
-// AdMob Console → Apps → İNDİVA → Ad units → + Create ad unit → Interstitial
-const INTERSTITIAL_AD_UNIT_ID = __DEV__
-  ? TestIds.INTERSTITIAL
-  : 'ca-app-pub-3675503435035155/3718760482';
+// Her kaç doğal (timer tamamlanan) geçişte bir sponsorlu story gösterilsin
+const SPONSORED_EVERY_N = 3;
 
 
 function timeAgo(timestamp: any): string {
@@ -173,15 +165,11 @@ export default function StoryDetailScreen({ route }: Props) {
   const goToRef = useRef<(n: number, d: 'next' | 'prev') => void>(() => {});
   const resumeRef = useRef<() => void>(() => {});
 
-  // ── Interstitial ────────────────────────────────────────────────
-  const interstitialRef = useRef(
-    InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
-      requestNonPersonalizedAdsOnly: true,
-    }),
-  );
-  const navCountRef = useRef(0);
-  const adReadyRef = useRef(false);
-  const pendingNavRef = useRef<{ nextIndex: number; direction: 'next' | 'prev' } | null>(null);
+  // ── Sponsored Story ─────────────────────────────────────────────
+  const [sponsoredVisible, setSponsoredVisible] = useState(false);
+  const naturalAdvanceCountRef = useRef(0);       // sadece timer tamamlanınca artar
+  const adLoadedRef             = useRef(false);   // SponsoredStoryCard'ın ad'ı yükleyince set eder
+  const pendingAfterSponsoredRef = useRef<number | null>(null); // sponsored sonrası gidilecek index
 
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
   // Reset copy feedback + backdrop state when navigating to a different story
@@ -203,33 +191,6 @@ export default function StoryDetailScreen({ route }: Props) {
   // new story — guaranteeing the slide view renders from cache before the
   // incoming panel disappears. Eliminates the "old story flash".
   const postTransitionRef = useRef(false);
-
-  useEffect(() => {
-    const ad = interstitialRef.current;
-    ad.load();
-    const unsubLoaded = ad.addAdEventListener(AdEventType.LOADED, () => {
-      adReadyRef.current = true;
-    });
-    const unsubClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
-      adReadyRef.current = false;
-      ad.load();
-      const pending = pendingNavRef.current;
-      pendingNavRef.current = null;
-      if (pending) goToRef.current(pending.nextIndex, pending.direction);
-    });
-    const unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
-      adReadyRef.current = false;
-      ad.load();
-    });
-    return () => {
-      unsubLoaded();
-      unsubClosed();
-      unsubError();
-      // Kalan tüm listener'ları temizle — memory leak'i önler
-      ad.removeAllListeners();
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Tracks whether the current story's image has loaded. When false we
   // hold the progress timer so users never miss content on slow networks.
@@ -256,7 +217,16 @@ export default function StoryDetailScreen({ route }: Props) {
       useNativeDriver: true,
     });
     animRef.current.start(({ finished }) => {
-      if (finished) goToRef.current(storyIndex + 1, 'next');
+      if (!finished) return;
+      const nextIndex = storyIndex + 1;
+      naturalAdvanceCountRef.current += 1;
+      // Her SPONSORED_EVERY_N doğal geçişte bir ve ad yüklüyse → sponsored story göster
+      if (naturalAdvanceCountRef.current % SPONSORED_EVERY_N === 0 && adLoadedRef.current) {
+        pendingAfterSponsoredRef.current = nextIndex;
+        setSponsoredVisible(true);
+      } else {
+        goToRef.current(nextIndex, 'next');
+      }
     });
   }, [progressAnims]);
 
@@ -305,13 +275,6 @@ export default function StoryDetailScreen({ route }: Props) {
     isPausedRef.current = false;
     isSwipingRef.current = false;
     haptic(8);
-
-    navCountRef.current += 1;
-    if (navCountRef.current % AD_EVERY_N === 0 && adReadyRef.current) {
-      pendingNavRef.current = { nextIndex, direction };
-      interstitialRef.current.show();
-      return;
-    }
 
     // Reset current panel to neutral, position incoming panel off-screen.
     slideX.setValue(0);
@@ -365,30 +328,32 @@ export default function StoryDetailScreen({ route }: Props) {
   useEffect(() => { resumeRef.current = resumeProgress; }, [resumeProgress]);
 
   // ── Mark story as viewed ────────────────────────────────────────
-  // Accumulate IDs in memory; flush to AsyncStorage once on unmount
-  // instead of reading+writing on every story change.
+  // Her story değişiminde hemen AsyncStorage'a yaz.
+  // Sadece unmount'ta yazmak, HomeScreen'in useFocusEffect'i ile
+  // race condition oluşturuyordu: geri dönüşte AsyncStorage henüz
+  // güncellenmemiş olduğu için halka ilk görüntülemede kaybolmuyordu.
   const viewedQueueRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const storyId = stories[currentIndex]?.id;
-    if (storyId) viewedQueueRef.current.add(storyId);
+    if (!storyId || viewedQueueRef.current.has(storyId)) return;
+    viewedQueueRef.current.add(storyId);
+    // Hemen yaz — useFocusEffect race condition'ını önle
+    AsyncStorage.getItem('indiva_viewed_influencer_stories')
+      .then(v => {
+        const existing: string[] = v ? JSON.parse(v) : [];
+        if (existing.includes(storyId)) return null;
+        return AsyncStorage.setItem(
+          'indiva_viewed_influencer_stories',
+          JSON.stringify([...existing, storyId]),
+        );
+      })
+      .catch(() => {});
   }, [currentIndex, stories]);
 
+  // Unmount'ta sadece ref'i temizle — yazma işlemi zaten yapıldı.
   useEffect(() => {
-    return () => {
-      const newIds = Array.from(viewedQueueRef.current);
-      if (newIds.length === 0) return;
-      AsyncStorage.getItem('indiva_viewed_influencer_stories')
-        .then(v => {
-          const existing: string[] = v ? JSON.parse(v) : [];
-          const merged = Array.from(new Set([...existing, ...newIds]));
-          return AsyncStorage.setItem(
-            'indiva_viewed_influencer_stories',
-            JSON.stringify(merged),
-          );
-        })
-        .catch(() => {});
-    };
+    return () => { viewedQueueRef.current.clear(); };
   }, []);
 
   // ── Start / restart progress when story changes ─────────────────
@@ -460,20 +425,19 @@ export default function StoryDetailScreen({ route }: Props) {
     animRef.current?.stop();
     if (timerRef.current) clearTimeout(timerRef.current);
     haptic(12);
+    // Scale'i hemen 1'e sıfırla — slide + fade yeterli, ek scale gereksiz kalabalık yaratır
+    slideScale.setValue(1);
     Animated.parallel([
       Animated.timing(slideY, {
-        toValue: SCREEN_H * 0.9,
-        duration: 240,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideScale, {
-        toValue: 0.85,
-        duration: 240,
+        toValue: SCREEN_H,
+        duration: 160,
+        easing: Easing.in(Easing.cubic), // ivmelenen çıkış — "fırlatılmış" hissi
         useNativeDriver: true,
       }),
       Animated.timing(bgOpacity, {
         toValue: 0,
-        duration: 220,
+        duration: 140,
+        easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
     ]).start(() => navigation.goBack());
@@ -536,10 +500,9 @@ export default function StoryDetailScreen({ route }: Props) {
       },
       onPanResponderMove: (_, g) => {
         if (g.dy > 0 && g.dy > Math.abs(g.dx)) {
-          // Pull-down: translate vertically, fade bg, gently shrink card.
+          // Pull-down: translate vertically + fade bg
           slideY.setValue(g.dy);
-          bgOpacity.setValue(Math.max(0.25, 1 - g.dy / 350));
-          slideScale.setValue(Math.max(0.9, 1 - g.dy / 1600));
+          bgOpacity.setValue(Math.max(0.25, 1 - g.dy / 300));
         } else if (g.dy < 0 && Math.abs(g.dy) > Math.abs(g.dx) && storyLinkRef.current) {
           // Pull-up: hint user is about to open the product link.
           slideY.setValue(g.dy);
@@ -601,7 +564,6 @@ export default function StoryDetailScreen({ route }: Props) {
           if (nextIdx < stories.length && transitionStoryIndexRef.current === nextIdx) {
             // Complete the gesture already in progress — continue from current position
             isTransitioningRef.current = true;
-            navCountRef.current += 1;
             Animated.parallel([
               Animated.timing(slideX, { toValue: -SCREEN_W, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true }),
               Animated.timing(incomingSlideX, { toValue: 0, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true }),
@@ -635,7 +597,6 @@ export default function StoryDetailScreen({ route }: Props) {
           if (prevIdx >= 0 && transitionStoryIndexRef.current === prevIdx) {
             // Complete the gesture already in progress — continue from current position
             isTransitioningRef.current = true;
-            navCountRef.current += 1;
             Animated.parallel([
               Animated.timing(slideX, { toValue: SCREEN_W, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true }),
               Animated.timing(incomingSlideX, { toValue: 0, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true }),
@@ -662,7 +623,7 @@ export default function StoryDetailScreen({ route }: Props) {
           // Snap back and resume
           const snapIncomingPos = transitionDirRef.current === 'next' ? SCREEN_W : -SCREEN_W;
           bgOpacity.setValue(1);
-          slideScale.setValue(1);
+          slideScale.setValue(1); // dismiss'te scale kullanılmıyor ama reset ihtiyatla yapılır
           Animated.parallel([
             Animated.spring(slideX, { toValue: 0, useNativeDriver: true }),
             Animated.spring(slideY, { toValue: 0, friction: 8, tension: 60, useNativeDriver: true }),
@@ -864,43 +825,6 @@ export default function StoryDetailScreen({ route }: Props) {
           {story.title ? (
             <Text style={styles.storyTitle} numberOfLines={2}>{story.title}</Text>
           ) : null}
-          {/* ── Coupon ticket ── */}
-          {story.discountCode ? (
-            <TouchableOpacity
-              onPress={handleCopyCoupon}
-              activeOpacity={0.82}
-              style={styles.couponTicket}
-            >
-              {/* Left: label + code */}
-              <View style={styles.couponLeft}>
-                <Text style={styles.couponLabel}>🎟  KUPON KODU</Text>
-                <Text style={styles.couponCode} numberOfLines={1}>
-                  {story.discountCode}
-                </Text>
-              </View>
-
-              {/* Perforated separator */}
-              <View style={styles.couponSep} />
-
-              {/* Right: copy action */}
-              <View style={styles.couponRight}>
-                {copied ? (
-                  <>
-                    <Text style={styles.couponCopyIcon}>✓</Text>
-                    <Text style={[styles.couponCopyText, { color: '#4ade80' }]}>
-                      Kopyalandı!
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.couponCopyIcon}>📋</Text>
-                    <Text style={styles.couponCopyText}>Kopyala</Text>
-                  </>
-                )}
-              </View>
-            </TouchableOpacity>
-          ) : null}
-
           {/* Swipe-up hint chevron */}
           {resolveStoryLink(story) ? (
             <Animated.View
@@ -924,13 +848,48 @@ export default function StoryDetailScreen({ route }: Props) {
               </View>
             </Animated.View>
           ) : null}
-          <TouchableOpacity
-            style={styles.ctaButton}
-            onPress={handleGoToProduct}
-            activeOpacity={0.88}
-          >
-            <Text style={styles.ctaText}>🛍️ İndirime Git</Text>
-          </TouchableOpacity>
+
+          {/* ── CTA butonu + kupon overlay ── */}
+          <View style={styles.ctaWrapper}>
+            {/* Kupon — CTA butonunun sağ üstüne yerleşmiş küçük kart */}
+            {story.discountCode ? (
+              <TouchableOpacity
+                onPress={handleCopyCoupon}
+                activeOpacity={0.82}
+                style={styles.couponTicket}
+              >
+                <View style={styles.couponLeft}>
+                  <Text style={styles.couponLabel}>🎟  KUPON</Text>
+                  <Text style={styles.couponCode} numberOfLines={1}>
+                    {story.discountCode}
+                  </Text>
+                </View>
+                <View style={styles.couponSep} />
+                <View style={styles.couponRight}>
+                  {copied ? (
+                    <>
+                      <Text style={styles.couponCopyIcon}>✓</Text>
+                      <Text style={[styles.couponCopyText, { color: '#4ade80' }]}>Kopyalandı!</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.couponCopyIcon}>📋</Text>
+                      <Text style={styles.couponCopyText}>Kopyala</Text>
+                    </>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ) : null}
+
+            {/* İNDİRİME GİT — eski yerinde tam genişlik */}
+            <TouchableOpacity
+              style={styles.ctaButton}
+              onPress={handleGoToProduct}
+              activeOpacity={0.88}
+            >
+              <Text style={styles.ctaText}>🛍️ İndirime Git</Text>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
       </Animated.View>
 
@@ -998,6 +957,19 @@ export default function StoryDetailScreen({ route }: Props) {
           resizeMode="contain"
         />
       </Animated.View>
+
+      {/* ══ SPONSORED STORY — her zaman mount'ta, sadece visible=true'da görünür ══ */}
+      {/* Arka planda native ad pre-load edilir; timer tamamlanınca akış devam eder.  */}
+      <SponsoredStoryCard
+        visible={sponsoredVisible}
+        onAdLoaded={() => { adLoadedRef.current = true; }}
+        onDismiss={() => {
+          setSponsoredVisible(false);
+          const nextIdx = pendingAfterSponsoredRef.current;
+          pendingAfterSponsoredRef.current = null;
+          if (nextIdx !== null) goToRef.current(nextIdx, 'next');
+        }}
+      />
     </Animated.View>
   );
 }
@@ -1167,59 +1139,63 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.3,
   },
-  // ── Coupon ticket ─────────────────────────────────────────────
+  // ── CTA wrapper: kupon sağ üstte, buton altta ────────────────
+  ctaWrapper: {
+    gap: 0,
+  },
+  // ── Coupon ticket — CTA butonunun sağ üstüne hizalı küçük kart
   couponTicket: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    backgroundColor: 'rgba(0,0,0,0.62)',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.28)',
-    marginBottom: 14,
+    alignSelf: 'flex-end',          // sağa yasla
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    marginBottom: 6,
     overflow: 'hidden',
   },
   couponLeft: {
-    flex: 1,
-    paddingHorizontal: 15,
-    paddingVertical: 11,
-    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 2,
     justifyContent: 'center',
   },
   couponLabel: {
     color: Colors.orangeLight,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
-    letterSpacing: 1.6,
+    letterSpacing: 1.2,
   },
   couponCode: {
     color: Colors.white,
-    fontSize: 20,
+    fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 3,
+    letterSpacing: 2,
   },
   couponSep: {
-    width: 1.5,
+    width: 1,
     backgroundColor: 'rgba(255,255,255,0.18)',
-    marginVertical: 0,
   },
   couponRight: {
-    width: 78,
+    width: 58,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    paddingVertical: 11,
+    gap: 2,
+    paddingVertical: 6,
     backgroundColor: 'rgba(255,255,255,0.07)',
   },
   couponCopyIcon: {
-    fontSize: 18,
+    fontSize: 13,
     color: Colors.white,
   },
   couponCopyText: {
     color: 'rgba(255,255,255,0.82)',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
 
+  // ── İNDİRİME GİT — tam genişlik, eski yerinde ────────────────
   ctaButton: {
     backgroundColor: Colors.orange,
     paddingVertical: 16,

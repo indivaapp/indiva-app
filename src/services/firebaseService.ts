@@ -14,6 +14,7 @@ import {
 } from '@react-native-firebase/firestore';
 import type { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { tsToMs } from '../utils/time';
 import type { Discount, Brochure, PendingDiscount, AdRequest, Story } from '../types';
 
 const ITEMS_PER_PAGE = 12;
@@ -22,9 +23,11 @@ const OFFLINE_CACHE_MAX = 24;
 
 // ─── TTL sabitleri ─────────────────────────────────────────────────────────────
 // Anlık indirim uygulaması → kısa TTL, ama her açılışta read yapmaktan tasarruflu
-export const HOME_CACHE_TTL   = 3  * 60 * 1000; //  3 dk: ana sayfa ilk sayfa
+export const HOME_CACHE_TTL   = 30 * 60 * 1000; // 30 dk: ana sayfa ilk sayfa
 const        STORIES_TTL      = 10 * 60 * 1000; // 10 dk: hikayeler
-const        CAT_SESSION_TTL  = 10 * 60 * 1000; // 10 dk: benzer ürün (oturum içi)
+const        CAT_SESSION_TTL  = 10 * 60 * 1000; // 10 dk: kategori (oturum içi)
+const        CAT_PERSISTENT_TTL = 30 * 60 * 1000; // 30 dk: kategori (AsyncStorage, app restart'ı karşılar)
+const        CAT_CACHE_KEY_PREFIX = 'indiva_cat_v1_';
 
 const HOME_CACHE_KEY    = 'indiva_home_v2';
 const STORIES_CACHE_KEY = 'indiva_stories_v2'; // affiliateLink normalize edildi
@@ -34,6 +37,30 @@ const _catSessionCache = new Map<string, {
   result: { discounts: Discount[]; lastVisible: FirebaseFirestoreTypes.QueryDocumentSnapshot | null; hasMore: boolean };
   ts: number;
 }>();
+
+// In-memory cache: tekil ilan detayı (FavoritesScreen vb.)
+const _discountByIdCache = new Map<string, { discount: Discount; ts: number }>();
+const DISCOUNT_BY_ID_TTL = 5 * 60 * 1000; // 5 dk
+
+// ─── Kalıcı kategori cache yardımcıları ───────────────────────────────────────
+interface CatPersistentData { discounts: Discount[]; ts: number }
+
+async function getCatPersistentCache(category: string): Promise<CatPersistentData | null> {
+  try {
+    const raw = await AsyncStorage.getItem(CAT_CACHE_KEY_PREFIX + category);
+    if (!raw) return null;
+    const data: CatPersistentData = JSON.parse(raw);
+    if (Date.now() - data.ts > CAT_PERSISTENT_TTL) return null;
+    return data;
+  } catch { return null; }
+}
+
+function saveCatPersistentCache(category: string, discounts: Discount[]): void {
+  AsyncStorage.setItem(
+    CAT_CACHE_KEY_PREFIX + category,
+    JSON.stringify({ discounts, ts: Date.now() } satisfies CatPersistentData)
+  ).catch(() => {});
+}
 
 const db = getFirestore();
 
@@ -77,19 +104,6 @@ export async function saveHomeCache(discounts: Discount[]): Promise<void> {
 
 // Cache'den okunan story'lere de 24h filtresi uygula — cache sırasında geçerli
 // olup sonradan süresi dolan story'lerin ekranda görünmesini önler.
-// Firebase Timestamp → ms dönüşümü.
-// 3 formatı destekler:
-//   1. Gerçek Timestamp nesnesi (.toMillis)
-//   2. JSON'dan deserialize edilmiş plain object ({seconds, nanoseconds})
-//   3. ISO string veya number (fallback)
-function tsToMs(ts: any): number | null {
-  if (!ts) return null;
-  if (typeof ts.toMillis === 'function') return ts.toMillis();
-  if (typeof ts.seconds === 'number') return ts.seconds * 1000;
-  const ms = new Date(ts).getTime();
-  return isNaN(ms) ? null : ms;
-}
-
 function filterExpiredStories(stories: Story[]): Story[] {
   const now = Date.now();
   const MS_24H = 24 * 60 * 60 * 1000;
@@ -107,7 +121,14 @@ function filterExpiredStories(stories: Story[]): Story[] {
   });
 }
 
-export async function fetchStoriesCached(): Promise<Story[]> {
+/**
+ * Önce cache'den anında döner, cache bayatsa arka planda yeniler.
+ * @param onRefresh  Cache bayat olduğunda arka plan fetch tamamlanınca çağrılır
+ *                   — UI bu callback ile güncel veriyi alır (re-render tetiklenir).
+ */
+export async function fetchStoriesCached(
+  onRefresh?: (fresh: Story[]) => void,
+): Promise<Story[]> {
   try {
     const raw = await AsyncStorage.getItem(STORIES_CACHE_KEY);
     if (raw) {
@@ -117,9 +138,10 @@ export async function fetchStoriesCached(): Promise<Story[]> {
       if (Date.now() - ts < STORIES_TTL) return filtered;
       // Bayat → filtrelenmiş veriyi hemen döndür, arka planda yenile
       fetchStories()
-        .then(fresh =>
-          AsyncStorage.setItem(STORIES_CACHE_KEY, JSON.stringify({ stories: fresh, ts: Date.now() }))
-        )
+        .then(fresh => {
+          AsyncStorage.setItem(STORIES_CACHE_KEY, JSON.stringify({ stories: fresh, ts: Date.now() })).catch(() => {});
+          onRefresh?.(fresh); // ← UI'ı da güncelle
+        })
         .catch(() => {});
       return filtered;
     }
@@ -142,15 +164,31 @@ export async function forceRefreshStories(): Promise<Story[]> {
 // lastVisible varsa (sayfalama) cache atlanır.
 export async function fetchDiscountsByCategoryCached(
   category: string,
-  lastVisible: FirebaseFirestoreTypes.QueryDocumentSnapshot | null = null
+  lastVisible: FirebaseFirestoreTypes.QueryDocumentSnapshot | null = null,
+  forceRefresh = false,
 ): Promise<{ discounts: Discount[]; lastVisible: FirebaseFirestoreTypes.QueryDocumentSnapshot | null; hasMore: boolean }> {
-  if (!lastVisible) {
-    const cached = _catSessionCache.get(category);
-    if (cached && Date.now() - cached.ts < CAT_SESSION_TTL) return cached.result;
+  if (!lastVisible && !forceRefresh) {
+    // 1. Bellek cache'i (en hızlı, cursor korumalı)
+    const mem = _catSessionCache.get(category);
+    if (mem && Date.now() - mem.ts < CAT_SESSION_TTL) return mem.result;
+
+    // 2. AsyncStorage cache (uygulama yeniden açılışını da karşılar)
+    const persisted = await getCatPersistentCache(category);
+    if (persisted) {
+      const result = {
+        discounts: persisted.discounts,
+        lastVisible: null as FirebaseFirestoreTypes.QueryDocumentSnapshot | null,
+        hasMore: false, // cursor serialize edilemez; sayfalama gerekirse Firebase'e gider
+      };
+      _catSessionCache.set(category, { result, ts: persisted.ts });
+      return result;
+    }
   }
+
   const result = await fetchDiscountsByCategory(category, lastVisible);
   if (!lastVisible) {
     _catSessionCache.set(category, { result, ts: Date.now() });
+    saveCatPersistentCache(category, result.discounts);
   }
   return result;
 }
@@ -243,79 +281,86 @@ export async function fetchSimilarDiscounts(
   currentId: string
 ): Promise<Discount[]> {
   try {
-    const col = collection(db, 'discounts');
-    const q = query(col, where('category', '==', category), limit(10));
-    const documentSnapshots = await withTimeout(getDocs(q), 10000, 'Benzer ilanlar');
-    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-    return documentSnapshots.docs
-      .map(d => ({ id: d.id, ...d.data() } as Discount))
-      .filter(d => {
-        if (d.id === currentId) return false;
-        if (isAdExpired(d)) return false;
-        if (d.status === 'İndirim Bitti') return false;
-        if (d.deleteAt) {
-          const dt = d.deleteAt as any;
-          const ms =
-            typeof dt.toMillis === 'function'
-              ? dt.toMillis()
-              : dt instanceof Date
-              ? dt.getTime()
-              : new Date(dt).getTime();
-          if (ms && Date.now() > ms) return false;
-        }
-        const ct = d.createdAt as any;
-        if (ct) {
-          const ms =
-            typeof ct.toMillis === 'function'
-              ? ct.toMillis()
-              : ct.seconds
-              ? ct.seconds * 1000
-              : 0;
-          if (ms && ms < cutoff) return false;
-        }
-        return true;
-      })
-      .slice(0, 4);
+    // Kategori cache'ini kullan — her ürün açılışında 10 read yerine 0
+    // (filterDiscounts zaten fetchDiscountsByCategory sırasında uygulandı)
+    const { discounts } = await fetchDiscountsByCategoryCached(category, null);
+    return discounts.filter(d => d.id !== currentId).slice(0, 4);
   } catch {
     return [];
   }
 }
 
 export async function getDiscountById(id: string): Promise<Discount | null> {
-  const docSnap = await withTimeout(
-    getDoc(doc(db, 'discounts', id)),
-    10000,
-    'İlan detayı'
-  );
-  if (docSnap.exists()) {
-    const discount = { id: docSnap.id, ...docSnap.data() } as Discount;
-    if (isAdExpired(discount)) return null;
-    return discount;
+  // Bellek cache'i — FavoritesScreen her focus'ta çağırdığı için önemli
+  const cached = _discountByIdCache.get(id);
+  if (cached && Date.now() - cached.ts < DISCOUNT_BY_ID_TTL) return cached.discount;
+
+  try {
+    const docSnap = await withTimeout(
+      getDoc(doc(db, 'discounts', id)),
+      10000,
+      'İlan detayı'
+    );
+    if (docSnap.exists()) {
+      const discount = { id: docSnap.id, ...docSnap.data() } as Discount;
+      if (isAdExpired(discount)) return null;
+      _discountByIdCache.set(id, { discount, ts: Date.now() });
+      return discount;
+    }
+    return null;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 export async function fetchBrochuresByStore(storeName: string): Promise<Brochure[]> {
-  const col = collection(db, `circulars/${storeName}/brochures`);
-  const q = query(col, orderBy('createdAt', 'desc'), limit(20));
-  const documentSnapshots = await withTimeout(getDocs(q), 10000, 'Broşürler');
-  return documentSnapshots.docs.map(d => ({
-    id: d.id,
-    ...d.data(),
-  })) as Brochure[];
+  try {
+    const col = collection(db, `circulars/${storeName}/brochures`);
+    const q = query(col, orderBy('createdAt', 'desc'), limit(20));
+    const documentSnapshots = await withTimeout(getDocs(q), 10000, 'Broşürler');
+    return documentSnapshots.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+    })) as Brochure[];
+  } catch {
+    return [];
+  }
 }
 
+const VERCEL_PROXY = 'https://indiva-proxy.vercel.app';
+
+/**
+ * Story'leri Vercel Edge Cache üzerinden çeker.
+ * Binlerce kullanıcı aynı endpoint'i çağırsa da Vercel CDN her 2 dakikada
+ * sadece 1 kez Firestore'a gider — diğer tüm istekler cache'ten karşılanır.
+ * Fallback: Vercel cevap vermezse doğrudan Firestore SDK'ya döner.
+ */
 export async function fetchStories(): Promise<Story[]> {
+  try {
+    const res = await withTimeout(
+      fetch(`${VERCEL_PROXY}/api/stories`, { headers: { Accept: 'application/json' } }),
+      10000,
+      'Hikayeler',
+    );
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.stories)) {
+        return json.stories as Story[];
+      }
+    }
+  } catch {
+    // Vercel ulaşılamaz → Firestore SDK'ya düş
+  }
+  // ─── Firestore SDK fallback ───────────────────────────────────────────────
   try {
     const col = collection(db, 'influencerStories');
     const q = query(col, where('isActive', '==', true), orderBy('createdAt', 'desc'));
     const snap = await withTimeout(getDocs(q), 10000, 'Hikayeler');
     const now = Date.now();
-    const MS_24H = 24 * 60 * 60 * 1000; // fetchStories filter ile paylaşılıyor
+    const MS_24H = 24 * 60 * 60 * 1000;
     return snap.docs
       .map(d => {
         const data = d.data();
-        // Firebase belgelerinde alan adı link, productLink veya url olabilir — normalize et
         const resolvedLink: string | undefined =
           data.affiliateLink || data.link || data.productLink || data.url || data.productUrl || undefined;
         return { id: d.id, ...data, link: resolvedLink } as Story;

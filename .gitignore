@@ -33,6 +33,7 @@ local.properties
 .cxx/
 *.keystore
 !debug.keystore
+!indiva-release.keystore
 .kotlin/
 
 # node.js

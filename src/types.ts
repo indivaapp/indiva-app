@@ -29,6 +29,7 @@ export interface Notification {
   date: string;
   read: boolean;
   discountId?: string;
+  storyId?: string;
   timestamp?: number;
 }
 

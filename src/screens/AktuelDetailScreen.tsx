@@ -8,7 +8,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
-import NativeAdCard from '../components/NativeAdCard';
 import { fetchBrochuresByStore } from '../services/firebaseService';
 import OptimizedImage from '../components/OptimizedImage';
 import { Colors } from '../constants/colors';
@@ -16,17 +15,16 @@ import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
 import type { Brochure } from '../types';
 
-const BANNER_AD_UNIT_ID = __DEV__
-  ? TestIds.ADAPTIVE_BANNER
-  : 'ca-app-pub-3675503435035155/8261572668';
-
 type ListItem =
   | { type: 'brochure'; data: Brochure; index: number }
-  | { type: 'banner'; key: string }
   | { type: 'footer' };
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AktuelDetail'>;
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+
+const BANNER_UNIT_ID = __DEV__
+  ? TestIds.ADAPTIVE_BANNER
+  : 'ca-app-pub-3675503435035155/8261572668';
 
 export default function AktuelDetailScreen({ route }: Props) {
   const { storeName } = route.params;
@@ -38,6 +36,8 @@ export default function AktuelDetailScreen({ route }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [lightboxIndex, setLightboxIndex] = useState(-1);
+  const [bannerHeight, setBannerHeight] = useState(0);
+  const [bannerFailed, setBannerFailed] = useState(false);
 
   // Lightbox swipe + pinch-zoom
   const lightboxSlide = useRef(new Animated.Value(0)).current;
@@ -61,16 +61,16 @@ export default function AktuelDetailScreen({ route }: Props) {
     resetZoom();
     Animated.timing(lightboxSlide, {
       toValue: dir === 'next' ? -SCREEN_W : SCREEN_W,
-      duration: 240,
-      easing: Easing.in(Easing.cubic),
+      duration: 120,
+      easing: Easing.out(Easing.quad),
       useNativeDriver: true,
     }).start(() => {
       lightboxSlide.setValue(dir === 'next' ? SCREEN_W : -SCREEN_W);
       setLightboxIndex(newIndex);
-      Animated.spring(lightboxSlide, {
+      Animated.timing(lightboxSlide, {
         toValue: 0,
-        friction: 9,
-        tension: 100,
+        duration: 100,
+        easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }).start();
     });
@@ -80,22 +80,47 @@ export default function AktuelDetailScreen({ route }: Props) {
 
   const lightboxPan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onStartShouldSetPanResponderCapture: () => false,
+      // ── 2 parmak: başlangıçta yakala (pinch) ─────────────────────────────────
+      // onStart false bırakılırsa Android'de PanResponder hiç aktive olmaz.
+      // Capture fazında 2 parmağı anında alıyoruz; navBtn gibi child'lar
+      // gestureArea'nın DIŞINDA (Katman 2) olduğu için çakışma yok.
+      onStartShouldSetPanResponder: evt =>
+        evt.nativeEvent.touches.length >= 2,
+      onStartShouldSetPanResponderCapture: evt =>
+        evt.nativeEvent.touches.length >= 2,
+
+      // ── Hareket fazında da kontrol et ─────────────────────────────────────────
       onMoveShouldSetPanResponder: (evt, gs) => {
-        if (evt.nativeEvent.touches.length === 2) return true;
-        return Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5 && Math.abs(gs.dx) > 10;
+        if (evt.nativeEvent.touches.length >= 2) return true;
+        // 1 parmak yatay kaydırma (zoom 1 iken) — yatay fark yeterli
+        if (currentZoomRef.current <= 1.05 && pinchDistRef.current === 0) {
+          return Math.abs(gs.dx) > 6;
+        }
+        return false;
       },
+      onMoveShouldSetPanResponderCapture: evt =>
+        evt.nativeEvent.touches.length >= 2,
+
+      // ── Grant: yeni gesture başlarken state sıfırla ───────────────────────────
+      onPanResponderGrant: evt => {
+        if (evt.nativeEvent.touches.length >= 2) {
+          pinchDistRef.current = 0;
+          pinchScaleRef.current = currentZoomRef.current;
+        } else {
+          lightboxSlide.stopAnimation();
+        }
+      },
+
       onPanResponderMove: (evt, gs) => {
         const touches = evt.nativeEvent.touches;
-        if (touches.length === 2) {
-          // Initialise pinch reference on first 2-finger move
+        if (touches.length >= 2) {
+          // ── Pinch zoom ─────────────────────────────────────────────────────────
           if (pinchDistRef.current === 0) {
             const dx = touches[0].pageX - touches[1].pageX;
             const dy = touches[0].pageY - touches[1].pageY;
             pinchDistRef.current = Math.sqrt(dx * dx + dy * dy);
             pinchScaleRef.current = currentZoomRef.current;
-            lightboxSlide.setValue(0); // cancel any in-progress swipe
+            lightboxSlide.setValue(0);
           }
           const dx = touches[0].pageX - touches[1].pageX;
           const dy = touches[0].pageY - touches[1].pageY;
@@ -104,35 +129,39 @@ export default function AktuelDetailScreen({ route }: Props) {
           zoomScale.setValue(next);
           currentZoomRef.current = next;
         } else if (pinchDistRef.current === 0 && currentZoomRef.current <= 1.05) {
-          // Single-finger swipe — only when not zoomed
-          lightboxSlide.setValue(gs.dx * 0.85);
+          // ── 1 parmak kaydırma (yalnızca zoom = 1 iken) ────────────────────────
+          lightboxSlide.setValue(gs.dx);
         }
       },
+
       onPanResponderRelease: (_, gs) => {
         const wasPinching = pinchDistRef.current > 0;
         pinchDistRef.current = 0;
 
-        // Snap zoom back to 1 if barely zoomed
+        // Çok az zoom'da 1'e döndür
         if (currentZoomRef.current < 1.15) {
           Animated.spring(zoomScale, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }).start();
           currentZoomRef.current = 1;
         }
 
         if (!wasPinching) {
+          // ── Geçiş kararı ───────────────────────────────────────────────────────
           const idx = lightboxIndexRef.current;
           const len = brochuresRef.current.length;
-          const threshold = SCREEN_W * 0.28;
-          if ((gs.dx < -threshold || (gs.dx < -30 && gs.vx < -0.6)) && idx < len - 1) {
+          const threshold = SCREEN_W * 0.25;
+          if ((gs.dx < -threshold || (gs.dx < -30 && gs.vx < -0.5)) && idx < len - 1) {
             changeLightboxRef.current(idx + 1, 'next');
-          } else if ((gs.dx > threshold || (gs.dx > 30 && gs.vx > 0.6)) && idx > 0) {
+          } else if ((gs.dx > threshold || (gs.dx > 30 && gs.vx > 0.5)) && idx > 0) {
             changeLightboxRef.current(idx - 1, 'prev');
           } else {
             Animated.spring(lightboxSlide, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
           }
         } else {
+          // Pinch bitti — slide sıfırla
           Animated.spring(lightboxSlide, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
         }
       },
+
       onPanResponderTerminate: () => {
         pinchDistRef.current = 0;
         Animated.spring(lightboxSlide, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
@@ -214,9 +243,6 @@ export default function AktuelDetailScreen({ route }: Props) {
   const listData: ListItem[] = [];
   brochures.forEach((item, i) => {
     listData.push({ type: 'brochure', data: item, index: i });
-    if ((i + 1) % 2 === 0 && i < brochures.length - 1) {
-      listData.push({ type: 'banner', key: `banner_${i}` });
-    }
   });
   listData.push({ type: 'footer' });
 
@@ -225,32 +251,16 @@ export default function AktuelDetailScreen({ route }: Props) {
       <FlatList
         data={listData}
         keyExtractor={item =>
-          item.type === 'brochure'
-            ? item.data.id
-            : item.type === 'banner'
-            ? item.key
-            : '__footer__'
+          item.type === 'brochure' ? item.data.id : '__footer__'
         }
-        contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
+        contentContainerStyle={[
+          styles.listContainer,
+          { paddingBottom: insets.bottom + bannerHeight + 16 },
+        ]}
         renderItem={({ item }) => {
-          if (item.type === 'banner') {
-            return (
-              <View style={styles.bannerWrapper}>
-                <BannerAd
-                  unitId={BANNER_AD_UNIT_ID}
-                  size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-                  requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-                  onAdFailedToLoad={() => {/* sessizce geç */}}
-                />
-              </View>
-            );
-          }
           if (item.type === 'footer') {
-            return (
-              <View style={styles.nativeAdWrapper}>
-                <NativeAdCard style={{ alignSelf: 'stretch' }} />
-              </View>
-            );
+            // Footer — sadece alt boşluk, reklam yok
+            return <View style={{ height: 16 }} />;
           }
           const { data, index } = item;
           return (
@@ -266,6 +276,7 @@ export default function AktuelDetailScreen({ route }: Props) {
                 <OptimizedImage
                   src={data.imageUrl}
                   alt={data.title}
+                  isDark={isDark}
                   containerStyle={StyleSheet.absoluteFill}
                   resizeMode="cover"
                 />
@@ -293,104 +304,126 @@ export default function AktuelDetailScreen({ route }: Props) {
         <View style={styles.lightboxBg}>
           {lightboxIndex >= 0 && (
             <>
-              {/* Swipeable + pinch-zoomable image */}
-              <Animated.View
-                style={[styles.lightboxImageWrap, { transform: [{ translateX: lightboxSlide }] }]}
-                {...lightboxPan.panHandlers}
-              >
-                <Animated.Image
-                  source={{ uri: brochures[lightboxIndex].imageUrl }}
-                  style={[styles.lightboxImage, { transform: [{ scale: zoomScale }] }]}
-                  resizeMode="contain"
-                />
-              </Animated.View>
-
-              {/* Swipe hint dots */}
-              <View style={styles.dotRow}>
-                {brochures.map((_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.dot,
-                      { backgroundColor: i === lightboxIndex ? Colors.orange : 'rgba(255,255,255,0.35)' },
-                    ]}
+              {/* ── Katman 1: Tam ekran gesture + görsel alanı ── */}
+              <View style={styles.lightboxGestureArea} {...lightboxPan.panHandlers}>
+                <Animated.View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    { transform: [{ translateX: lightboxSlide }] },
+                  ]}
+                >
+                  <Animated.Image
+                    source={{ uri: brochures[lightboxIndex].imageUrl }}
+                    style={[styles.lightboxImage, { transform: [{ scale: zoomScale }] }]}
+                    resizeMode="contain"
                   />
-                ))}
+                </Animated.View>
               </View>
 
-              {/* Page counter */}
-              <View style={styles.pageCounter}>
-                <Text style={styles.pageCounterText}>
-                  {lightboxIndex + 1} / {brochures.length}
-                </Text>
-              </View>
-
-              {/* Nav buttons */}
-              {lightboxIndex > 0 && (
-                <TouchableOpacity
-                  style={[styles.navBtnLB, styles.navBtnLeft]}
-                  onPress={() => changeLightboxIndex(lightboxIndex - 1, 'prev')}
-                >
-                  <Text style={styles.navBtnText}>‹</Text>
-                </TouchableOpacity>
-              )}
-              {lightboxIndex < brochures.length - 1 && (
-                <TouchableOpacity
-                  style={[styles.navBtnLB, styles.navBtnRight]}
-                  onPress={() => changeLightboxIndex(lightboxIndex + 1, 'next')}
-                >
-                  <Text style={styles.navBtnText}>›</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Close */}
-              <TouchableOpacity
-                style={styles.closeBtnLB}
-                onPress={() => { setLightboxIndex(-1); resetZoom(); }}
-              >
-                <Text style={{ color: Colors.white, fontSize: 18, fontWeight: '800' }}>✕</Text>
-              </TouchableOpacity>
-
-              {/* Validity */}
-              {brochures[lightboxIndex].validityDate && (
-                <View style={styles.validityBadge}>
-                  <Text style={{ color: Colors.white, fontSize: 12 }}>📅 {brochures[lightboxIndex].validityDate}</Text>
+              {/* ── Katman 2: UI kontrolleri — box-none ile gesture'ı bloklamaz ── */}
+              <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+                {/* Sayfa sayacı */}
+                <View pointerEvents="none" style={styles.pageCounter}>
+                  <Text style={styles.pageCounterText}>
+                    {lightboxIndex + 1} / {brochures.length}
+                  </Text>
                 </View>
-              )}
 
-              {/* Thumbnails */}
-              <View style={styles.thumbBar}>
-                <FlatList
-                  ref={thumbListRef}
-                  data={brochures}
-                  horizontal
-                  keyExtractor={item => item.id}
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}
-                  getItemLayout={(_, index) => ({ length: 52, offset: (52 + 8) * index + 12, index })}
-                  renderItem={({ item, index }) => (
-                    <TouchableOpacity
-                      onPress={() => {
-                        const dir = index > lightboxIndex ? 'next' : 'prev';
-                        changeLightboxIndex(index, dir);
-                      }}
+                {/* Nokta göstergeleri */}
+                <View pointerEvents="none" style={styles.dotRow}>
+                  {brochures.map((_, i) => (
+                    <View
+                      key={i}
                       style={[
-                        styles.thumbItem,
-                        {
-                          borderColor: index === lightboxIndex ? Colors.orange : 'transparent',
-                          opacity: index === lightboxIndex ? 1 : 0.4,
-                        },
+                        styles.dot,
+                        { backgroundColor: i === lightboxIndex ? Colors.orange : 'rgba(255,255,255,0.35)' },
                       ]}
-                    >
-                      <Image source={{ uri: item.imageUrl }} style={styles.thumbImage} />
-                    </TouchableOpacity>
-                  )}
-                />
+                    />
+                  ))}
+                </View>
+
+                {/* Önceki / sonraki butonları */}
+                {lightboxIndex > 0 && (
+                  <TouchableOpacity
+                    style={[styles.navBtnLB, styles.navBtnLeft]}
+                    onPress={() => changeLightboxIndex(lightboxIndex - 1, 'prev')}
+                  >
+                    <Text style={styles.navBtnText}>‹</Text>
+                  </TouchableOpacity>
+                )}
+                {lightboxIndex < brochures.length - 1 && (
+                  <TouchableOpacity
+                    style={[styles.navBtnLB, styles.navBtnRight]}
+                    onPress={() => changeLightboxIndex(lightboxIndex + 1, 'next')}
+                  >
+                    <Text style={styles.navBtnText}>›</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Kapat */}
+                <TouchableOpacity
+                  style={styles.closeBtnLB}
+                  onPress={() => { setLightboxIndex(-1); resetZoom(); }}
+                >
+                  <Text style={{ color: Colors.white, fontSize: 18, fontWeight: '800' }}>✕</Text>
+                </TouchableOpacity>
+
+                {/* Geçerlilik tarihi */}
+                {brochures[lightboxIndex].validityDate && (
+                  <View pointerEvents="none" style={styles.validityBadge}>
+                    <Text style={{ color: Colors.white, fontSize: 12 }}>📅 {brochures[lightboxIndex].validityDate}</Text>
+                  </View>
+                )}
+
+                {/* Küçük resim şeridi */}
+                <View style={styles.thumbBar}>
+                  <FlatList
+                    ref={thumbListRef}
+                    data={brochures}
+                    horizontal
+                    keyExtractor={item => item.id}
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}
+                    getItemLayout={(_, index) => ({ length: 52, offset: (52 + 8) * index + 12, index })}
+                    renderItem={({ item, index }) => (
+                      <TouchableOpacity
+                        onPress={() => {
+                          const dir = index > lightboxIndex ? 'next' : 'prev';
+                          changeLightboxIndex(index, dir);
+                        }}
+                        style={[
+                          styles.thumbItem,
+                          {
+                            borderColor: index === lightboxIndex ? Colors.orange : 'transparent',
+                            opacity: index === lightboxIndex ? 1 : 0.4,
+                          },
+                        ]}
+                      >
+                        <Image source={{ uri: item.imageUrl }} style={styles.thumbImage} />
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
               </View>
             </>
           )}
         </View>
       </Modal>
+
+      {/* ── Anchored Banner — ekranın sabit altında, scroll etmez ── */}
+      {/* lightboxIndex >= 0 iken gizle: transparent Modal üstünde görünür,
+          bu accidental click riski = AdMob politika ihlali */}
+      {!bannerFailed && lightboxIndex < 0 && (
+        <View style={[styles.bannerContainer, { bottom: insets.bottom }]}>
+          <BannerAd
+            unitId={BANNER_UNIT_ID}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+            onAdLoaded={e => setBannerHeight(e.height)}
+            onAdFailedToLoad={() => setBannerFailed(true)}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -411,25 +444,30 @@ const styles = StyleSheet.create({
   },
   brochureImageContainer: { aspectRatio: 3 / 4, width: '100%', backgroundColor: Colors.gray100 },
   brochureInfo: { paddingHorizontal: 12, paddingVertical: 8 },
-  bannerWrapper: { alignItems: 'center', marginVertical: 4 },
-  nativeAdWrapper: { marginHorizontal: 8, marginVertical: 6 },
   lightboxBg: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.95)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#000',
   },
-  lightboxImageWrap: {
+  // Tam ekran gesture katmanı — thumbBar hariç tüm alanı kapsar
+  lightboxGestureArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 90, // thumbBar yüksekliği
+  },
+  lightboxImage: {
     width: SCREEN_W,
-    height: SCREEN_H * 0.7,
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: SCREEN_H - 90,
   },
-  lightboxImage: { width: SCREEN_W, height: SCREEN_H * 0.7 },
   dotRow: {
+    position: 'absolute',
+    bottom: 100,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
+    justifyContent: 'center',
     gap: 6,
-    marginTop: 12,
   },
   dot: {
     width: 6,
@@ -496,4 +534,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   thumbImage: { width: '100%', height: '100%' },
+  bannerContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
 });

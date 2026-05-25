@@ -216,7 +216,7 @@ export default function RootNavigator({ notificationCount }: Props) {
           headerLeft: () => <BackButton onPress={() => navigation.goBack()} />,
         })}
       />
-      <Stack.Screen name="StoryDetail" component={StoryDetailScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="StoryDetail" component={StoryDetailScreen} options={{ headerShown: false, animation: 'fade' }} />
     </Stack.Navigator>
   );
 }
@@ -230,11 +230,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 20,
     shadowColor: Colors.orange,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
-    borderWidth: 1.5,
-    borderColor: Colors.orange + '50',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 10,
+    borderWidth: 2.5,
+    borderColor: Colors.orange,
   },
 });

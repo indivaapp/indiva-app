@@ -13,6 +13,7 @@ import {
   BackHandler,
   Modal,
   Animated,
+  AppState,
 } from 'react-native';
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -23,7 +24,6 @@ import {
   fetchDiscountsByCategoryCached,
   getOfflineCache,
   fetchStoriesCached,
-  forceRefreshStories,
   getHomeCache,
   saveHomeCache,
 } from '../services/firebaseService';
@@ -164,11 +164,30 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   useEffect(() => {
     loadVotesCache().then(() => setVotes(getVotes()));
     loadInitial();
-    fetchStoriesCached().then(s => {
+    // İlk yükleme: cache varsa anında göster, bayatsa arka planda yenile ve UI'ı güncelle
+    fetchStoriesCached(fresh => setStories(fresh)).then(s => {
       setStories(s);
       setStoriesLoading(false);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Uygulama arka plandan öne geldiğinde story'leri yenile —
+  // ancak en az STORIES_TTL kadar (10 dk) aralıkla, her geçişte Firebase okuma yapmamak için.
+  useEffect(() => {
+    let lastStoryRefresh = 0; // timestamp; 0 = hiç yenilenmedi
+    const STORY_FOREGROUND_MIN_INTERVAL = 10 * 60 * 1000; // 10 dk
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        const now = Date.now();
+        if (now - lastStoryRefresh < STORY_FOREGROUND_MIN_INTERVAL) return;
+        lastStoryRefresh = now;
+        fetchStoriesCached(fresh => setStories(fresh))
+          .then(s => setStories(s))
+          .catch(() => {});
+      }
+    });
+    return () => sub.remove();
   }, []);
 
   // Tab butonuna basılınca kategoriyi sıfırla
@@ -193,8 +212,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     AsyncStorage.getItem('indiva_viewed_influencer_stories')
       .then(v => setViewedStoryIds(v ? JSON.parse(v) : []))
       .catch(() => {});
-    // Story listesini yenile: süresi dolan story'ler hemen UI'dan kalkar
-    fetchStoriesCached().then(setStories).catch(() => {});
+    // Story listesini yenile: cache bayatsa arka plan refresh UI'ı da günceller
+    fetchStoriesCached(fresh => setStories(fresh)).then(setStories).catch(() => {});
   }, []));
 
   const lastVisibleRef = useRef(lastVisible);
@@ -282,28 +301,19 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       setVotes(getVotes());
 
       if (selectedCategory === 'Tümü') {
-        // Global feed + hikayeler — her ikisini de taze çek ve cache güncelle
-        const [result, freshStories] = await Promise.all([
-          fetchDiscounts(null),
-          forceRefreshStories(),
-        ]);
+        const result = await fetchDiscounts(null);
         setDiscounts(result.discounts);
         setLastVisible(result.lastVisible);
         setHasMore(result.hasMore);
-        setStories(freshStories);
         saveHomeCache(result.discounts);
       } else {
-        // Kategori modu — kategoriyi yenile, hikayeyi arka planda güncelle
-        const [catResult, freshStories] = await Promise.all([
-          fetchDiscountsByCategory(selectedCategory, null),
-          forceRefreshStories(),
-        ]);
+        // forceRefresh=true → cache'i atla, yeni veriyi cache'e yaz
+        const catResult = await fetchDiscountsByCategoryCached(selectedCategory, null, true);
         setCatDiscounts(catResult.discounts);
         setCatLastVisible(catResult.lastVisible);
         catLastVisibleRef.current = catResult.lastVisible;
         setCatHasMore(catResult.hasMore);
         catHasMoreRef.current = catResult.hasMore;
-        setStories(freshStories);
       }
       setIsOffline(false);
     } catch {
@@ -429,34 +439,24 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     if (discounts.length === 0 || prefetchDoneRef.current) return;
     prefetchDoneRef.current = true;
     const timer = setTimeout(() => {
-      allCategories.slice(1, 4).forEach(cat => {
-        fetchDiscountsByCategoryCached(cat, null).catch(() => {});
-      });
+      // Sadece 1 kategori prefetch — 36 read yerine 12 (persistent cache varsa 0)
+      if (allCategories[1]) {
+        fetchDiscountsByCategoryCached(allCategories[1], null).catch(() => {});
+      }
     }, 2000);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [discounts.length]);
 
-  // ── Kategori geçişi — hızlı flash (toplam ~120ms) ────────────────
-  const catAnimMounted = useRef(false);
-  useEffect(() => {
-    // İlk render'da animasyon çalışmasın
-    if (!catAnimMounted.current) { catAnimMounted.current = true; return; }
-    listFade.stopAnimation();
-    Animated.sequence([
-      Animated.timing(listFade, { toValue: 0, duration: 40, useNativeDriver: true }),
-      Animated.timing(listFade, { toValue: 1, duration: 80, useNativeDriver: true }),
-    ]).start();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory]);
+  // ── Kategori geçişi — opacity sıfıra indirilmez, skeleton zaten geçişi yönetir ─
 
-  // ── Arama fade — biraz daha yavaş (kullanıcı yazıyor) ────────────
+  // ── Arama fade — hafif solma, kararma değil ──────────────────────
   useEffect(() => {
-    if (!debouncedSearch && !searchTerm) return; // ilk render atla
+    if (!debouncedSearch && !searchTerm) return;
     listFade.stopAnimation();
     Animated.sequence([
-      Animated.timing(listFade, { toValue: 0.2, duration: 60, useNativeDriver: true }),
-      Animated.timing(listFade, { toValue: 1,   duration: 140, useNativeDriver: true }),
+      Animated.timing(listFade, { toValue: 0.75, duration: 60, useNativeDriver: true }),
+      Animated.timing(listFade, { toValue: 1,    duration: 120, useNativeDriver: true }),
     ]).start();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch]);
@@ -496,8 +496,9 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       rows.push({ rowKey: `row-${i}`, layout: 'pair', left, right });
       pairCount++;
 
-      // Her 2 çiftten sonra full-width native ad satırı ekle (4 indirimde bir)
-      if (pairCount % 2 === 0) {
+      // İlk 3 pair reklamsız (kullanıcı önce içeriği görsün),
+      // sonrasında her 4 pair'de bir native ad satırı ekle (8 indirimde bir → ~%11 yoğunluk)
+      if (pairCount >= 3 && pairCount % 4 === 0) {
         rows.push({ rowKey: `ad-${adCount++}`, layout: 'ad' });
       }
     }
@@ -637,6 +638,10 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         keyExtractor={(item: HomeRow) => item.rowKey}
         renderItem={renderItem}
         removeClippedSubviews={true}
+        windowSize={5}
+        maxToRenderPerBatch={4}
+        initialNumToRender={4}
+        updateCellsBatchingPeriod={30}
         style={{ flex: 1, opacity: listFade, display: (isLoading || isCategoryPending) && filteredDiscounts.length === 0 ? 'none' : 'flex' }}
         contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
         ListHeaderComponent={

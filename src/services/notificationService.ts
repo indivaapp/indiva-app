@@ -96,8 +96,13 @@ export async function deleteAllNotifications(): Promise<Notification[]> {
 export async function addNotification(
   title: string,
   body: string,
-  discountId?: string
+  discountId?: string,
+  storyId?: string,
 ): Promise<Notification> {
+  // Arka plan handler'ı cache yüklenmeden önce çalışabilir — güvence için yükle
+  if (notificationsCache === null) {
+    await loadNotificationsCache();
+  }
   const notifications = notificationsCache ?? [];
   const timestamp = Date.now();
   const newNotification: Notification = {
@@ -107,6 +112,7 @@ export async function addNotification(
     date: 'Az önce',
     read: false,
     discountId,
+    storyId,
     timestamp,
   };
   const updated = [newNotification, ...notifications].slice(0, 50);

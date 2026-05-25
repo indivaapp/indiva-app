@@ -83,8 +83,8 @@ android {
         applicationId "com.indiva.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 12
-        versionName "2.2.0"
+        versionCode 13
+        versionName "3.0.0"
         externalNativeBuild {
             cmake {
                 arguments "-DCMAKE_BUILD_PARALLEL_LEVEL=2"
@@ -98,15 +98,19 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            storeFile file('indiva-release.keystore')
+            storePassword 'Raunen?_123'
+            keyAlias 'indiva'
+            keyPassword 'Raunen?_123'
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }

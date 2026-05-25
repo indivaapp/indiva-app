@@ -41,7 +41,7 @@ export default function ProfileTermsScreen() {
 
       <Text style={[styles.heading, { color: isDark ? Colors.white : Colors.gray800 }]}>5. İletişim</Text>
       <Text style={[styles.body, { color: textColor }]}>
-        Kullanım şartları hakkında: indiva.app@gmail.com
+        Kullanım şartları hakkında: indivaapp@gmail.com
       </Text>
 
       <Text style={[styles.footer, { color: Colors.gray400 }]}>Son güncelleme: Nisan 2026</Text>
