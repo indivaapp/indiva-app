@@ -12,16 +12,6 @@ import { submitPendingDiscount } from '../services/firebaseService';
 import { CATEGORIES } from '../constants/categories';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
-import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
-
-const INTERSTITIAL_AD_UNIT_ID = __DEV__
-  ? TestIds.INTERSTITIAL
-  : 'ca-app-pub-3675503435035155/1880723761';
-
-const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
-  requestNonPersonalizedAdsOnly: true,
-});
-
 const STEPS = [
   { num: '1', label: 'Link oluştur' },
   { num: '2', label: 'Formu doldur' },
@@ -34,7 +24,6 @@ export default function AffiliateFormScreen() {
   const isDark = effectiveTheme === 'dark';
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-
   const [productName, setProductName]   = useState('');
   const [brand, setBrand]               = useState('');
   const [category, setCategory]         = useState('');
@@ -46,31 +35,6 @@ export default function AffiliateFormScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess]       = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
-
-  const submissionResultRef = useRef<'success' | 'error' | null>(null);
-  const adClosedRef  = useRef(false);
-  const adShownRef   = useRef(false);
-
-  useEffect(() => {
-    const unsubClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
-      interstitial.load();
-      adClosedRef.current = true;
-      if (submissionResultRef.current !== null) {
-        if (submissionResultRef.current === 'success') {
-          setIsSuccess(true);
-        } else {
-          Alert.alert('Hata', 'Gönderim sırasında bir hata oluştu. İnternet bağlantınızı kontrol edin.');
-          setIsSubmitting(false);
-        }
-        submissionResultRef.current = null;
-      }
-    });
-    const unsubError = interstitial.addAdEventListener(AdEventType.ERROR, () => {
-      setTimeout(() => { try { interstitial.load(); } catch {} }, 3000);
-    });
-    interstitial.load();
-    return () => { unsubClosed(); unsubError(); };
-  }, []);
 
   // ── Theme helpers ──────────────────────────────────────────────────
   const bg          = isDark ? Colors.gray900  : '#f8f9fb';
@@ -123,14 +87,6 @@ export default function AffiliateFormScreen() {
     }
 
     setIsSubmitting(true);
-    submissionResultRef.current = null;
-    adClosedRef.current  = false;
-    adShownRef.current   = false;
-
-    if (interstitial.loaded) {
-      adShownRef.current = true;
-      interstitial.show().catch(() => { adShownRef.current = false; });
-    }
 
     try {
       await submitPendingDiscount({
@@ -140,15 +96,10 @@ export default function AffiliateFormScreen() {
         newPrice: parseFloat(newPrice),
         imageBase64,
       });
-      if (!adShownRef.current || adClosedRef.current) setIsSuccess(true);
-      else submissionResultRef.current = 'success';
+      setIsSuccess(true);
     } catch {
-      if (!adShownRef.current || adClosedRef.current) {
-        Alert.alert('Hata', 'Gönderim sırasında bir hata oluştu. İnternet bağlantınızı kontrol edin.');
-        setIsSubmitting(false);
-      } else {
-        submissionResultRef.current = 'error';
-      }
+      Alert.alert('Hata', 'Gönderim sırasında bir hata oluştu. İnternet bağlantınızı kontrol edin.');
+      setIsSubmitting(false);
     }
   };
 

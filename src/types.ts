@@ -20,6 +20,9 @@ export interface Discount {
   deleteAt?: FirebaseFirestoreTypes.Timestamp | Date;
   expiredAt?: FirebaseFirestoreTypes.Timestamp;
   errorReason?: string;
+  // Topluluk oylaması — Firestore'da increment() ile toplanır
+  activeVotes?: number;
+  expiredVotes?: number;
 }
 
 export interface Notification {

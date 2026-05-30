@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getUserVotes } from './voteService';
+import { getBonusPoints } from './rewardService';
 
 export interface Badge {
   icon: string;
@@ -62,6 +63,22 @@ export async function setClaimedTierMin(min: number): Promise<void> {
   try { await AsyncStorage.setItem(CLAIMED_TIER_KEY, String(min)); } catch {}
 }
 
+// ─── Ziyaret (inceleme) sayacı ───────────────────────────────────────────────
+// Tüm artışları tek bir promise zincirinden geçirir → ardışık oku-değiştir-yaz
+// yarış durumunu engeller (slide ile hızlı ilan geçişlerinde sayım kaçmaz).
+const VISIT_COUNT_KEY = 'detailVisitCount';
+let visitWriteChain: Promise<void> = Promise.resolve();
+
+export function incrementVisitCount(): void {
+  visitWriteChain = visitWriteChain.then(async () => {
+    try {
+      const val = await AsyncStorage.getItem(VISIT_COUNT_KEY);
+      const count = val ? parseInt(val, 10) : 0;
+      await AsyncStorage.setItem(VISIT_COUNT_KEY, String(count + 1));
+    } catch {}
+  });
+}
+
 export interface ContributionStats {
   points: number;
   voteCount: number;
@@ -84,12 +101,15 @@ export async function getContributionStats(): Promise<ContributionStats> {
 
   let rawVisits = 0;
   try {
-    const visitsStr = await AsyncStorage.getItem('detailVisitCount');
+    const visitsStr = await AsyncStorage.getItem(VISIT_COUNT_KEY);
     rawVisits = visitsStr ? parseInt(visitsStr, 10) : 0;
   } catch {}
 
   const visitCount = Math.min(rawVisits, 50);
-  const points = voteCount * 10 + favoriteCount * 5 + visitCount * 2;
+  // Temel puan + ödüllü reklamdan kazanılan bonus puan
+  // Oy ×5, Favori ×3, İnceleme ×2
+  const bonusPoints = await getBonusPoints();
+  const points = voteCount * 5 + favoriteCount * 3 + visitCount * 2 + bonusPoints;
 
   const claimedMin = await getClaimedTierMin();
 

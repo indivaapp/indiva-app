@@ -1,24 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated, Modal,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, Animated, Modal, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme, Theme } from '../context/ThemeContext';
 import {
   getContributionStats, setClaimedTierMin, BADGE_TIERS, ContributionStats, Badge,
 } from '../services/contributionService';
 import { loadVotesCache } from '../services/voteService';
+import { getStreak } from '../services/streakService';
 import NativeAdCard from '../components/NativeAdCard';
+import RewardedRewardButton from '../components/RewardedRewardButton';
 import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
-
-const INTERSTITIAL_ID = __DEV__ ? TestIds.INTERSTITIAL : 'ca-app-pub-3675503435035155/1880723761';
-const rankInterstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_ID, { requestNonPersonalizedAdsOnly: true });
 
 const CONGRATS_MESSAGES: Record<string, string> = {
   'Aktif Üye': 'İndirim takibinde ciddi bir oyuncusun. Fırsatlar seni bekliyor!',
@@ -50,9 +48,9 @@ export default function ProfileScreen() {
   const isDark = effectiveTheme === 'dark';
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavProp>();
-
   const [stats, setStats] = useState<ContributionStats | null>(null);
   const [congratsBadge, setCongratsBadge] = useState<Badge | null>(null);
+  const [streak, setStreak] = useState(0);
 
   const scrollRef = useRef<any>(null);
   const lastStatsFetchRef = useRef(0);
@@ -88,16 +86,8 @@ export default function ProfileScreen() {
     ]).start();
   };
 
-  useEffect(() => {
-    rankInterstitial.load();
-    // Hata durumunda yeniden yükle (ağ hatası, fill yok vb.)
-    const unsubError = rankInterstitial.addAdEventListener(AdEventType.ERROR, () => {
-      setTimeout(() => rankInterstitial.load(), 3000);
-    });
-    return () => unsubError();
-  }, []);
-
   useFocusEffect(useCallback(() => {
+    getStreak().then(setStreak).catch(() => {});
     const now = Date.now();
     if (now - lastStatsFetchRef.current < STATS_TTL) return;
     lastStatsFetchRef.current = now;
@@ -142,24 +132,20 @@ export default function ProfileScreen() {
     claimRankUp(stats.pendingRankUp);
   };
 
-  // Tebrik modalı "Devam Et" → modal kapat → SONRA interstitial göster
-  // "Görevin tamamlanması sonrası" = AdMob uyumlu doğal durak noktası
   const handleCongratsClose = () => {
     setCongratsBadge(null);
-    if (rankInterstitial.loaded) {
-      // Kısa gecikme: modal kapanma animasyonu bitmeden reklam açılmasın
-      setTimeout(() => {
-        // Önce listener, sonra show — CLOSED event kaçmasın
-        const unsub = rankInterstitial.addAdEventListener(AdEventType.CLOSED, () => {
-          unsub();
-          rankInterstitial.load(); // bir sonraki rozet için önceden yükle
-        });
-        rankInterstitial.show().catch(() => {
-          unsub();
-          rankInterstitial.load(); // gösterim başarısızsa da yeniden yükle
-        });
-      }, 350);
-    }
+  };
+
+  // Ödüllü reklam tamamlandı → puanları (bonus dahil) tazele + bilgilendir
+  const handleRewardEarned = (pointsAwarded: number) => {
+    lastStatsFetchRef.current = 0; // TTL'i atla, hemen yeniden hesapla
+    getContributionStats().then(refreshStats).catch(() => {});
+    Alert.alert(
+      'Teşekkürler! 🎉',
+      pointsAwarded > 0
+        ? `${pointsAwarded} puan kazandın!`
+        : 'Bugünkü puan hakkın doldu — yarın tekrar dene.',
+    );
   };
 
   if (!stats) return <View style={[styles.container, { backgroundColor: bg }]} />;
@@ -196,6 +182,11 @@ export default function ProfileScreen() {
 
           {/* Contribution card */}
           <View style={styles.contribCard}>
+            {streak > 0 && (
+              <View style={styles.streakChip}>
+                <Text style={styles.streakText}>🔥 {streak} günlük seri</Text>
+              </View>
+            )}
             <View style={styles.contribHeader}>
               <View style={styles.badgeIconBox}>
                 <Text style={{ fontSize: 28 }}>{stats.badge.icon}</Text>
@@ -243,8 +234,8 @@ export default function ProfileScreen() {
             {/* 3 stat boxes */}
             <View style={styles.statsRow}>
               {[
-                { label: 'Oy', value: stats.voteCount, icon: '🗳️', pts: '×10' },
-                { label: 'Favori', value: stats.favoriteCount, icon: '❤️', pts: '×5' },
+                { label: 'Oy', value: stats.voteCount, icon: '🗳️', pts: '×5' },
+                { label: 'Favori', value: stats.favoriteCount, icon: '❤️', pts: '×3' },
                 { label: 'İnceleme', value: stats.visitCount, icon: '👁️', pts: '×2' },
               ].map(s => (
                 <View key={s.label} style={styles.statBox}>
@@ -264,8 +255,12 @@ export default function ProfileScreen() {
             !isDark && { borderWidth: 1, borderColor: Colors.gray100 },
           ]}>
             <View style={styles.rankHeader}>
-              <Text style={{ fontSize: 15 }}>🏆</Text>
-              <Text style={[styles.sectionLabel, { color: isDark ? Colors.gray400 : Colors.gray600, marginBottom: 0 }]}>Rütbe Yolu</Text>
+              <View style={styles.rankHeaderLeft}>
+                <Text style={{ fontSize: 15 }}>🏆</Text>
+                <Text style={[styles.sectionLabel, { color: isDark ? Colors.gray400 : Colors.gray600, marginBottom: 0 }]}>Rütbe Yolu</Text>
+              </View>
+              {/* Reklam izle → +200 puan (başlığın sağında) */}
+              <RewardedRewardButton onReward={handleRewardEarned} />
             </View>
 
             {[...BADGE_TIERS].reverse().map((tier, index, arr) => {
@@ -354,6 +349,9 @@ export default function ProfileScreen() {
             })}
           </View>
 
+          {/* Native reklam — Rütbe Yolu ile Tema arasında */}
+          <NativeAdCard style={{ alignSelf: 'stretch' }} />
+
           {/* Theme picker */}
           <View style={[styles.card, { backgroundColor: themeCardBg }]}>
             <View style={styles.themeHeader}>
@@ -404,8 +402,6 @@ export default function ProfileScreen() {
           </View>
 
           <Text style={{ textAlign: 'center', color: Colors.gray400, fontSize: 12, marginTop: 8 }}>İNDİVA v1.2.0</Text>
-
-          <NativeAdCard style={{ alignSelf: 'stretch', marginTop: 8 }} />
         </View>
       </ScrollView>
 
@@ -539,6 +535,15 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
+  streakChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 4,
+  },
+  streakText: { color: Colors.white, fontSize: 12, fontWeight: '800' },
   contribHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   badgeIconBox: {
     width: 56, height: 56, borderRadius: 16,
@@ -576,7 +581,8 @@ const styles = StyleSheet.create({
   statPts: { color: 'rgba(255,255,255,0.4)', fontSize: 10 },
   sectionLabel: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
   // Rank ladder
-  rankHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  rankHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 12 },
+  rankHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   rankRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 8, paddingHorizontal: 8,

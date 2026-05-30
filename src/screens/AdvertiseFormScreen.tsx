@@ -5,21 +5,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
 import { submitAdRequest } from '../services/firebaseService';
 import { CATEGORIES } from '../constants/categories';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
-
-const INTERSTITIAL_AD_UNIT_ID = __DEV__
-  ? TestIds.INTERSTITIAL
-  : 'ca-app-pub-3675503435035155/1880723761';
-
-const interstitial = InterstitialAd.createForAdRequest(INTERSTITIAL_AD_UNIT_ID, {
-  requestNonPersonalizedAdsOnly: true,
-});
-
 const CATEGORIES_WITH_OTHER = [...CATEGORIES, 'Diğer'];
 type AdType = 'product' | 'store' | null;
 
@@ -49,7 +39,6 @@ export default function AdvertiseFormScreen() {
   const isDark = effectiveTheme === 'dark';
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-
   const [adType, setAdType]             = useState<AdType>(null);
   const [companyName, setCompanyName]   = useState('');
   const [contactPerson, setContactPerson] = useState('');
@@ -61,31 +50,6 @@ export default function AdvertiseFormScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess]       = useState(false);
   const [showCatPicker, setShowCatPicker] = useState(false);
-
-  const submissionResultRef = useRef<'success' | 'error' | null>(null);
-  const adClosedRef = useRef(false);
-  const adShownRef  = useRef(false);
-
-  useEffect(() => {
-    const unsubClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
-      interstitial.load();
-      adClosedRef.current = true;
-      if (submissionResultRef.current !== null) {
-        if (submissionResultRef.current === 'success') {
-          setIsSuccess(true);
-        } else {
-          Alert.alert('Hata', 'Başvuru gönderilirken bir hata oluştu.');
-          setIsSubmitting(false);
-        }
-        submissionResultRef.current = null;
-      }
-    });
-    const unsubError = interstitial.addAdEventListener(AdEventType.ERROR, () => {
-      setTimeout(() => { try { interstitial.load(); } catch {} }, 3000);
-    });
-    interstitial.load();
-    return () => { unsubClosed(); unsubError(); };
-  }, []);
 
   // ── Theme helpers ──────────────────────────────────────────────────
   const bg          = isDark ? Colors.gray900  : '#f8f9fb';
@@ -110,29 +74,16 @@ export default function AdvertiseFormScreen() {
     }
 
     setIsSubmitting(true);
-    submissionResultRef.current = null;
-    adClosedRef.current = false;
-    adShownRef.current  = false;
-
-    if (interstitial.loaded) {
-      adShownRef.current = true;
-      interstitial.show().catch(() => { adShownRef.current = false; });
-    }
 
     try {
       await submitAdRequest({
         type: adType, companyName, contactPerson,
         email, url, category, discountCode, message,
       });
-      if (!adShownRef.current || adClosedRef.current) setIsSuccess(true);
-      else submissionResultRef.current = 'success';
+      setIsSuccess(true);
     } catch {
-      if (!adShownRef.current || adClosedRef.current) {
-        Alert.alert('Hata', 'Başvuru gönderilirken bir hata oluştu.');
-        setIsSubmitting(false);
-      } else {
-        submissionResultRef.current = 'error';
-      }
+      Alert.alert('Hata', 'Başvuru gönderilirken bir hata oluştu.');
+      setIsSubmitting(false);
     }
   };
 

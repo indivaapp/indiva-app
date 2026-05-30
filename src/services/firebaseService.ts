@@ -313,6 +313,27 @@ export async function getDiscountById(id: string): Promise<Discount | null> {
   }
 }
 
+/**
+ * Tek bir ilanın GÜNCEL topluluk oy sayılarını Firestore'dan taze çeker.
+ * Detay ekranı açıldığında çağrılır — feed cache'i oy sayılarını içermez/eskidir.
+ * App cache'ini atlar (her zaman taze), tek doküman = 1 read.
+ */
+export async function fetchDiscountVotes(
+  id: string,
+): Promise<{ activeVotes: number; expiredVotes: number } | null> {
+  try {
+    const snap = await withTimeout(getDoc(doc(db, 'discounts', id)), 8000, 'Oy sayısı');
+    if (!snap.exists()) return null;
+    const data = snap.data() as any;
+    return {
+      activeVotes: typeof data?.activeVotes === 'number' ? data.activeVotes : 0,
+      expiredVotes: typeof data?.expiredVotes === 'number' ? data.expiredVotes : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchBrochuresByStore(storeName: string): Promise<Brochure[]> {
   try {
     const col = collection(db, `circulars/${storeName}/brochures`);
@@ -343,7 +364,7 @@ export async function fetchStories(): Promise<Story[]> {
       'Hikayeler',
     );
     if (res.ok) {
-      const json = await res.json();
+      const json = (await res.json()) as { success?: boolean; stories?: Story[] };
       if (json.success && Array.isArray(json.stories)) {
         return json.stories as Story[];
       }

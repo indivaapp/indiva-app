@@ -24,10 +24,12 @@ import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-n
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NativeAdCard from '../components/NativeAdCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { incrementVisitCount } from '../services/contributionService';
+import { suppressAppOpen } from '../services/appOpenControl';
 import Clipboard from '@react-native-clipboard/clipboard';
-import { getDiscountById, fetchDiscountsByCategory, fetchDiscountsByCategoryCached } from '../services/firebaseService';
+import { getDiscountById, fetchDiscountsByCategory, fetchDiscountsByCategoryCached, fetchDiscountVotes } from '../services/firebaseService';
 import {
-  getVotes, isDiscountExpired, addVote, Votes,
+  isDiscountExpired, addVote,
   hasUserVoted, getUserVoteType, setExpireTimer, getExpireAt,
 } from '../services/voteService';
 import OptimizedImage from '../components/OptimizedImage';
@@ -40,10 +42,6 @@ import type { Discount } from '../types';
 type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>;
 const { width: SCREEN_W } = Dimensions.get('window');
 
-// Oturum içi bellek cache — AsyncStorage okumalarını geçiş başına bir kez sınırlar
-const _vcCache = new Map<string, { firstViewedAt: number; localViews: number }>();
-
-
 const getFavoriteIds = async (): Promise<string[]> => {
   try {
     const v = await AsyncStorage.getItem('favoriteDiscounts');
@@ -51,24 +49,6 @@ const getFavoriteIds = async (): Promise<string[]> => {
   } catch { return []; }
 };
 
-function simpleHash(str: string): number {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) {
-    h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h);
-}
-
-function getFakeViewCount(discountId: string, discountPct: number, firstViewedAt: number, localViews: number): number {
-  const hash = simpleHash(discountId);
-  const hash2 = simpleHash(discountId + 'dur');
-  const scale = 0.5 + Math.max(0, Math.min(discountPct, 100)) / 100 * 0.5;
-  const baseTarget = Math.round((200 + (hash % 1801)) * scale);
-  const durationMs = (4 + (hash2 % 5)) * 3600000;
-  const startValue = Math.round(baseTarget * 0.15);
-  const progress = Math.min((Date.now() - firstViewedAt) / durationMs, 1);
-  return Math.floor(startValue + (baseTarget - startValue) * progress) + localViews;
-}
 
 function timeAgoStr(createdAt: any): string {
   if (!createdAt) return '';
@@ -99,7 +79,6 @@ export default function DetailScreen({ route }: Props) {
   const similarLoadingRef = useRef(false);
   const [isLoading, setIsLoading] = useState(!routeDiscount);
   const [error, setError] = useState('');
-  const [votes, setVotes] = useState<Votes>(getVotes());
   const [userVoted, setUserVoted] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
@@ -117,7 +96,6 @@ export default function DetailScreen({ route }: Props) {
     return () => sub.remove();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lightboxVisible]);
-  const [viewCount, setViewCount] = useState<number | null>(null);
 
   // Animasyon değerleri
   const slideX      = useRef(new Animated.Value(0)).current;
@@ -248,13 +226,10 @@ export default function DetailScreen({ route }: Props) {
   // Load interstitial ad — hata olursa 3 saniye sonra tekrar dene
   useEffect(() => {
     getFavoriteIds().then(setFavorites);
-    setVotes(getVotes());
     setUserVoted(hasUserVoted(id));
     // Ziyaret sayacını artır — katkı puanlarında "İnceleme" sayısına yansır
-    AsyncStorage.getItem('detailVisitCount').then(val => {
-      const count = val ? parseInt(val, 10) : 0;
-      AsyncStorage.setItem('detailVisitCount', String(count + 1));
-    });
+    // (serileştirilmiş yardımcı → ardışık geçişlerde yarış durumu yok)
+    incrementVisitCount();
   }, [id]);
 
   // Slide ile geçilen indirim değişince oy durumunu güncelle
@@ -277,6 +252,23 @@ export default function DetailScreen({ route }: Props) {
     }
   }, [id, routeDiscount]);
 
+  // Görüntülenen ilanın GÜNCEL topluluk oy sayılarını Firestore'dan tazele.
+  // Feed cache'i oy sayılarını içermediği için ekrana her girişte/odakta okunur
+  // → "geri gelince %0 görünüyor" sorununu çözer.
+  useFocusEffect(useCallback(() => {
+    const targetId = currentDiscountIdForView;
+    if (!targetId) return;
+    fetchDiscountVotes(targetId).then(v => {
+      if (!v) return;
+      const apply = (disc: Discount | null): Discount | null =>
+        disc && disc.id === targetId
+          ? { ...disc, activeVotes: v.activeVotes, expiredVotes: v.expiredVotes }
+          : disc;
+      setDiscount(prev => apply(prev));
+      setLocalDiscount(prev => apply(prev));
+    });
+  }, [currentDiscountIdForView]));
+
   // Slide sonrası localDiscount değişince benzer ürünleri de yenile
   const displayedCategory = localDiscount?.category ?? discount?.category;
 
@@ -290,8 +282,9 @@ export default function DetailScreen({ route }: Props) {
     setSimilarLastVisible(null);
     setSimilarHasMore(false);
     similarLoadingRef.current = true;
+    setSimilarLoading(true);
 
-    // Cache'den çek (session/persistent cache varsa anında döner, spinner gerekmez)
+    // Cache'den çek (session/persistent cache varsa çok kısa sürede döner)
     fetchDiscountsByCategoryCached(targetCat, null)
       .then(({ discounts, lastVisible, hasMore }) => {
         setSimilarDiscounts(discounts.filter(d => d.id !== targetId));
@@ -308,10 +301,10 @@ export default function DetailScreen({ route }: Props) {
 
   // Expire countdown — slide sonrası currentDiscountIdForView değişince güncellenir
   useEffect(() => {
-    const dId = currentDiscountIdForView;
-    if (!dId) return;
-    const currentVotes = getVotes();
-    if (!isDiscountExpired(dId, currentVotes)) { setExpireCountdown(''); return; }
+    const disc = localDiscount ?? discount;
+    if (!disc) return;
+    const dId = disc.id;
+    if (!isDiscountExpired(disc)) { setExpireCountdown(''); return; }
     setExpireTimer(dId);
     const tick = () => {
       const expireAt = getExpireAt(dId);
@@ -326,48 +319,7 @@ export default function DetailScreen({ route }: Props) {
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDiscountIdForView, votes]);
-
-  // Fake view count: deterministic target, grows linearly 4-8 hours from first visit
-  useEffect(() => {
-    const discountId = currentDiscountIdForView;
-    if (!discountId) return;
-    const currentD = localDiscount ?? discount;
-    const pct = currentD && currentD.oldPrice > 0 && currentD.newPrice > 0
-      ? Math.round(((currentD.oldPrice - currentD.newPrice) / currentD.oldPrice) * 100)
-      : 0;
-    let intervalId: ReturnType<typeof setInterval>;
-    const init = async () => {
-      const cached = _vcCache.get(discountId);
-      if (cached) {
-        const update = () => setViewCount(getFakeViewCount(discountId, pct, cached.firstViewedAt, cached.localViews));
-        update();
-        intervalId = setInterval(update, 30000);
-        return;
-      }
-      const firstViewKey = `firstViewed_${discountId}`;
-      let firstViewedAt = Date.now();
-      try {
-        const stored = await AsyncStorage.getItem(firstViewKey);
-        if (stored) { firstViewedAt = parseInt(stored, 10); }
-        else { await AsyncStorage.setItem(firstViewKey, String(firstViewedAt)); }
-      } catch {}
-      let localViews = 1;
-      const lvKey = `localViews_${discountId}`;
-      try {
-        const stored = await AsyncStorage.getItem(lvKey);
-        localViews = stored ? parseInt(stored, 10) + 1 : 1;
-        await AsyncStorage.setItem(lvKey, String(localViews));
-      } catch {}
-      _vcCache.set(discountId, { firstViewedAt, localViews });
-      const update = () => setViewCount(getFakeViewCount(discountId, pct, firstViewedAt, localViews));
-      update();
-      intervalId = setInterval(update, 30000);
-    };
-    init();
-    return () => clearInterval(intervalId);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDiscountIdForView]);
+  }, [currentDiscountIdForView, localDiscount?.activeVotes, localDiscount?.expiredVotes, discount?.activeVotes, discount?.expiredVotes]);
 
   // postTransitionRef useEffect: positions reset AFTER React commits new localIndex —
   // prevents the 1-frame flash of old content when slideX.setValue(0) fires before render.
@@ -555,7 +507,7 @@ export default function DetailScreen({ route }: Props) {
   // d = currently displayed discount (updates on swipe, unlike `discount` which is only the initially loaded one)
   const d = localDiscount ?? discount!;
 
-  const isExpired = isDiscountExpired(d.id, votes);
+  const isExpired = isDiscountExpired(d);
   // timeAgoStr 3 kez kullanılıyordu — bir kez hesapla
   const timeAgoText: string = timeAgoStr(d.createdAt);
   const isAd = d.isAd === true;
@@ -567,7 +519,7 @@ export default function DetailScreen({ route }: Props) {
   const savings = d.oldPrice > d.newPrice ? Math.round(d.oldPrice - d.newPrice) : 0;
   const isHotDeal = discountPercentage >= 30;
   const isLowestPrice = discountPercentage >= 50;
-  const voteData = votes[d.id] || { active: 0, expired: 0 };
+  const voteData = { active: d.activeVotes ?? 0, expired: d.expiredVotes ?? 0 };
   const totalVotes = voteData.active + voteData.expired;
   const activeRatio = totalVotes > 0 ? voteData.active / totalVotes : 0;
   const expiredRatio = totalVotes > 0 ? voteData.expired / totalVotes : 0;
@@ -579,6 +531,7 @@ export default function DetailScreen({ route }: Props) {
     const waUrl = `whatsapp://send?text=${encodeURIComponent(text)}`;
     const canOpen = await Linking.canOpenURL(waUrl).catch(() => false);
     if (canOpen) {
+      suppressAppOpen();
       await Linking.openURL(waUrl).catch(() => {});
     } else {
       try { await Share.share({ message: text, title: d.title }); } catch {}
@@ -600,10 +553,10 @@ export default function DetailScreen({ route }: Props) {
   const handleGoToDiscount = async () => {
     try {
       if (isAd) {
-        if (d.link) await Linking.openURL(d.link);
+        if (d.link) { suppressAppOpen(); await Linking.openURL(d.link); }
         return;
       }
-      if (!isExpired && d.link) await Linking.openURL(d.link);
+      if (!isExpired && d.link) { suppressAppOpen(); await Linking.openURL(d.link); }
     } catch {
       Alert.alert('Hata', 'Bağlantı açılamadı. Tarayıcınızı kontrol edin.');
     }
@@ -611,13 +564,19 @@ export default function DetailScreen({ route }: Props) {
 
   const handleVote = async (voteType: 'active' | 'expired') => {
     if (userVoted) return;
-    await addVote(d.id, voteType);
-    const newVotes = getVotes();
-    setVotes(newVotes);
-    setUserVoted(true);
-    if (isDiscountExpired(d.id, newVotes)) {
-      setExpireTimer(d.id);
-    }
+    setUserVoted(true);                       // iyimser: butonu hemen kilitle
+    const ok = await addVote(d.id, voteType);
+    if (!ok) { setUserVoted(false); return; } // Firestore yazımı başarısız → geri al
+
+    // İyimser sayım artışı — görüntülenen ilana yansıt (sonraki fetch'te sunucudan gelir)
+    const field: 'activeVotes' | 'expiredVotes' = voteType === 'active' ? 'activeVotes' : 'expiredVotes';
+    const bump = (disc: Discount | null): Discount | null =>
+      disc && disc.id === d.id ? { ...disc, [field]: (disc[field] ?? 0) + 1 } : disc;
+    setLocalDiscount(prev => bump(prev));
+    setDiscount(prev => bump(prev));
+
+    const bumped = { ...d, [field]: (d[field] ?? 0) + 1 };
+    if (isDiscountExpired(bumped)) setExpireTimer(d.id);
   };
 
   const handleCopyCode = () => {
@@ -680,6 +639,13 @@ export default function DetailScreen({ route }: Props) {
             )}
 
 
+            {/* Eklenme zamanı — sağ üst köşe */}
+            {timeAgoText ? (
+              <View style={styles.timeBadgeHero} pointerEvents="none">
+                <Text style={styles.timeBadgeHeroText}>⏱ {timeAgoText}</Text>
+              </View>
+            ) : null}
+
             {/* Tap hint */}
             <View style={styles.imageHint}>
               <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11 }}>Büyütmek için dokun</Text>
@@ -718,22 +684,28 @@ export default function DetailScreen({ route }: Props) {
 
             {/* Title */}
             <Text style={[styles.discountTitle, { color: textColor }]}>{d.title}</Text>
-
-
-            <View style={[styles.titleDivider, { backgroundColor: isDark ? Colors.gray700 : Colors.gray100 }]} />
-
-            {/* Meta row: views + time */}
-            <View style={styles.metaRow}>
-              <Text style={[styles.metaText, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
-                👁  {viewCount !== null ? viewCount.toLocaleString('tr-TR') : '–'} inceleme
-              </Text>
-              {timeAgoText ? (
-                <Text style={[styles.metaText, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
-                  ⏱  {timeAgoText}
-                </Text>
-              ) : null}
-            </View>
           </Animated.View>
+
+          {/* Native reklam — başlık ile fiyat arasında, yatay şerit */}
+          <NativeAdCard horizontal />
+
+          {/* ── Sponsorlu ilan açıklaması ───────────────────────────── */}
+          {isAd && !!d.description && (
+            <View style={[styles.descriptionCard, {
+              backgroundColor: isDark ? '#1a1505' : '#fffbeb',
+              borderColor: isDark ? Colors.yellow400 + '30' : Colors.yellow400 + '60',
+            }]}>
+              <View style={styles.descriptionHeader}>
+                <View style={[styles.descriptionDot, { backgroundColor: Colors.yellow400 }]} />
+                <Text style={[styles.descriptionLabel, { color: isDark ? Colors.yellow400 : '#92400e' }]}>
+                  ÜRÜN AÇIKLAMASI
+                </Text>
+              </View>
+              <Text style={[styles.descriptionText, { color: isDark ? Colors.gray300 : Colors.gray700 }]}>
+                {d.description}
+              </Text>
+            </View>
+          )}
 
           {/* ── Price card ──────────────────────────────────────────── */}
           {(d.newPrice > 0 || d.oldPrice > 0) && (
@@ -794,14 +766,8 @@ export default function DetailScreen({ route }: Props) {
                 </View>
               )}
 
-              {/* Footer */}
-              <View style={[styles.priceDivider, { backgroundColor: isDark ? Colors.gray800 : Colors.orange + '18' }]} />
-              <Text style={[styles.priceFooterNote, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>
-                ⏱  Fiyat değişkenlik gösterebilir
-              </Text>
             </Animated.View>
           )}
-
 
           {/* Favorite + Share */}
           <View style={styles.actionRow}>
@@ -909,9 +875,6 @@ export default function DetailScreen({ route }: Props) {
             </View>
           )}
 
-          {/* Native reklam — İNDİVA watermark üstünde */}
-          <NativeAdCard style={{ alignSelf: 'stretch' }} />
-
           {/* INDIVA watermark */}
           <View style={styles.watermark}>
             <View style={[styles.divLine, { backgroundColor: isDark ? Colors.gray700 : Colors.gray300 }]} />
@@ -936,7 +899,7 @@ export default function DetailScreen({ route }: Props) {
                         setFavorites(next);
                         AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(next));
                       }}
-                      isExpired={isDiscountExpired(item.id, votes)}
+                      isExpired={isDiscountExpired(item)}
                       discountList={similarDiscounts}
                     />
                   </View>
@@ -1013,16 +976,16 @@ export default function DetailScreen({ route }: Props) {
                 <View style={[styles.titleDivider, { backgroundColor: isDark ? Colors.gray700 : Colors.gray100 }]} />
                 <Text style={[styles.discountTitle, { color: textColor }]} numberOfLines={2}>{inc.title}</Text>
                 <View style={[styles.titleDivider, { backgroundColor: isDark ? Colors.gray700 : Colors.gray100 }]} />
-                <View style={styles.metaRow}>
-                  <Text style={[styles.metaText, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
-                    👁  {viewCount !== null ? viewCount.toLocaleString('tr-TR') : '–'} inceleme
-                  </Text>
-                  {timeAgoText ? (
-                    <Text style={[styles.metaText, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
-                      ⏱  {timeAgoText}
-                    </Text>
-                  ) : null}
-                </View>
+                {(() => {
+                    const incTimeAgo = timeAgoStr(inc.createdAt);
+                    return incTimeAgo ? (
+                      <View style={styles.metaRow}>
+                        <Text style={[styles.metaText, { color: isDark ? Colors.gray500 : Colors.gray400 }]}>
+                          ⏱  {incTimeAgo}
+                        </Text>
+                      </View>
+                    ) : null;
+                  })()}
               </View>
 
               {/* Price preview */}
@@ -1068,10 +1031,6 @@ export default function DetailScreen({ route }: Props) {
                         </Text>
                       </View>
                     )}
-                    <View style={[styles.priceDivider, { backgroundColor: isDark ? Colors.gray800 : Colors.orange + '18' }]} />
-                    <Text style={[styles.priceFooterNote, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>
-                      ⏱  Fiyat değişkenlik gösterebilir
-                    </Text>
                   </View>
                 );
               })()}
@@ -1091,9 +1050,9 @@ export default function DetailScreen({ route }: Props) {
               {/* CTA preview */}
               {(() => {
                 const incIsAd = inc.isAd === true;
-                const incExpired = isDiscountExpired(inc.id, votes);
+                const incExpired = isDiscountExpired(inc);
                 const incUserVoted = hasUserVoted(inc.id);
-                const incVoteData = votes[inc.id] || { active: 0, expired: 0 };
+                const incVoteData = { active: inc.activeVotes ?? 0, expired: inc.expiredVotes ?? 0 };
                 const incTotalVotes = incVoteData.active + incVoteData.expired;
                 const incActiveRatio = incTotalVotes > 0 ? incVoteData.active / incTotalVotes : 0;
                 const incExpiredRatio = incTotalVotes > 0 ? incVoteData.expired / incTotalVotes : 0;
@@ -1367,6 +1326,34 @@ const styles = StyleSheet.create({
   savingsBarText: { fontSize: 14, fontWeight: '700' },
   priceDivider: { height: 1 },
   priceFooterNote: { fontSize: 11, textAlign: 'center' },
+
+  // ── Sponsorlu açıklama kartı ─────────────────────────────────────
+  descriptionCard: {
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    gap: 8,
+  },
+  descriptionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  descriptionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  descriptionLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  descriptionText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+
   actionRow: { flexDirection: 'row', gap: 10 },
   actionBtn: {
     flex: 1,
@@ -1431,7 +1418,6 @@ divLine: { flex: 1, height: 1 },
     width: SCREEN_W,
     height: SCREEN_W * 1.2,
   },
-  viewCountText: { fontSize: 12, fontWeight: '600' },
   lightboxClose: {
     position: 'absolute',
     top: 48,

@@ -1,40 +1,35 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getFirestore,
+  doc,
+  updateDoc,
+  increment,
+} from '@react-native-firebase/firestore';
+import type { Discount } from '../types';
 
-export interface Votes {
-  [discountId: string]: {
-    active: number;
-    expired: number;
-  };
-}
-
-const VOTE_KEY = 'discountVotes';
 const USER_VOTES_KEY = 'userVotes';
 const EXPIRE_TIMERS_KEY = 'discountExpireTimers';
 
-// Sync wrappers using in-memory cache for synchronous-like access
-let votesCache: Votes | null = null;
+const db = getFirestore();
+
+// ─── In-memory cache ─────────────────────────────────────────────────────────
+// Oy SAYILARI artık Firestore'da (ilan dokümanında activeVotes/expiredVotes).
+// Cihazda yalnızca "bu kullanıcı hangi ilana ne oy verdi" + süre sayaçları tutulur.
 let userVotesCache: Record<string, 'active' | 'expired'> | null = null;
 let expireTimersCache: Record<string, number> | null = null;
 
 export async function loadVotesCache(): Promise<void> {
   try {
-    const [votesStr, userVotesStr, timersStr] = await Promise.all([
-      AsyncStorage.getItem(VOTE_KEY),
+    const [userVotesStr, timersStr] = await Promise.all([
       AsyncStorage.getItem(USER_VOTES_KEY),
       AsyncStorage.getItem(EXPIRE_TIMERS_KEY),
     ]);
-    votesCache = votesStr ? JSON.parse(votesStr) : {};
     userVotesCache = userVotesStr ? JSON.parse(userVotesStr) : {};
     expireTimersCache = timersStr ? JSON.parse(timersStr) : {};
   } catch {
-    votesCache = {};
     userVotesCache = {};
     expireTimersCache = {};
   }
-}
-
-export function getVotes(): Votes {
-  return votesCache ?? {};
 }
 
 export function getUserVotes(): Record<string, 'active' | 'expired'> {
@@ -49,32 +44,39 @@ export function getUserVoteType(discountId: string): 'active' | 'expired' | null
   return (userVotesCache ?? {})[discountId] || null;
 }
 
+// ─── Oy verme — Firestore'da topluluk sayacını artırır ─────────────────────────
+// Başarılı olursa cihazda "oy verildi" işaretlenir (tekrar oyu engeller).
+// Dönüş: yazma başarılı mı (false ise UI iyimser değişikliği geri alabilir).
 export async function addVote(
   discountId: string,
-  voteType: 'active' | 'expired'
-): Promise<void> {
-  if (hasUserVoted(discountId)) return;
+  voteType: 'active' | 'expired',
+): Promise<boolean> {
+  if (hasUserVoted(discountId)) return false;
 
-  const allVotes = getVotes();
-  if (!allVotes[discountId]) {
-    allVotes[discountId] = { active: 0, expired: 0 };
+  const field = voteType === 'active' ? 'activeVotes' : 'expiredVotes';
+  try {
+    await updateDoc(doc(db, 'discounts', discountId), { [field]: increment(1) });
+  } catch {
+    return false; // ağ/kural hatası → oy kaydedilmedi, kullanıcı tekrar deneyebilir
   }
-  allVotes[discountId][voteType]++;
-  votesCache = allVotes;
-  await AsyncStorage.setItem(VOTE_KEY, JSON.stringify(allVotes));
 
   const uv = getUserVotes();
   uv[discountId] = voteType;
   userVotesCache = uv;
-  await AsyncStorage.setItem(USER_VOTES_KEY, JSON.stringify(uv));
+  try { await AsyncStorage.setItem(USER_VOTES_KEY, JSON.stringify(uv)); } catch {}
+  return true;
 }
 
-export function isDiscountExpired(discountId: string, allVotes: Votes): boolean {
-  const votes = allVotes[discountId];
-  if (!votes || votes.expired < 3) return false;
-  return votes.expired >= votes.active * 3;
+// ─── Topluluk kararı: ilan "süresi doldu" sayılır mı? ──────────────────────────
+// Sayılar ilan dokümanından (server) gelir. En az 3 "bitti" oyu VE bitti ≥ aktif×3.
+export function isDiscountExpired(discount: Pick<Discount, 'activeVotes' | 'expiredVotes'>): boolean {
+  const active = discount.activeVotes ?? 0;
+  const expired = discount.expiredVotes ?? 0;
+  if (expired < 3) return false;
+  return expired >= active * 3;
 }
 
+// ─── Süre sayaçları (oy ile "bitti" sayılınca 1 saatlik geri sayım) ────────────
 export async function setExpireTimer(discountId: string): Promise<void> {
   try {
     const timers = expireTimersCache ?? {};

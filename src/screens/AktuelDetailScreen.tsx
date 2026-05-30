@@ -7,7 +7,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BannerAd, BannerAdSize, TestIds } from 'react-native-google-mobile-ads';
 import { fetchBrochuresByStore } from '../services/firebaseService';
 import OptimizedImage from '../components/OptimizedImage';
 import { Colors } from '../constants/colors';
@@ -22,10 +21,6 @@ type ListItem =
 type Props = NativeStackScreenProps<RootStackParamList, 'AktuelDetail'>;
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-const BANNER_UNIT_ID = __DEV__
-  ? TestIds.ADAPTIVE_BANNER
-  : 'ca-app-pub-3675503435035155/8261572668';
-
 export default function AktuelDetailScreen({ route }: Props) {
   const { storeName } = route.params;
   const { effectiveTheme } = useTheme();
@@ -36,9 +31,6 @@ export default function AktuelDetailScreen({ route }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [lightboxIndex, setLightboxIndex] = useState(-1);
-  const [bannerHeight, setBannerHeight] = useState(0);
-  const [bannerFailed, setBannerFailed] = useState(false);
-
   // Lightbox swipe + pinch-zoom
   const lightboxSlide = useRef(new Animated.Value(0)).current;
   const zoomScale     = useRef(new Animated.Value(1)).current;
@@ -80,24 +72,17 @@ export default function AktuelDetailScreen({ route }: Props) {
 
   const lightboxPan = useRef(
     PanResponder.create({
-      // ── 2 parmak: başlangıçta yakala (pinch) ─────────────────────────────────
-      // onStart false bırakılırsa Android'de PanResponder hiç aktive olmaz.
-      // Capture fazında 2 parmağı anında alıyoruz; navBtn gibi child'lar
-      // gestureArea'nın DIŞINDA (Katman 2) olduğu için çakışma yok.
-      onStartShouldSetPanResponder: evt =>
-        evt.nativeEvent.touches.length >= 2,
+      // ── Her dokunuşu baştan claim et ──────────────────────────────────────────
+      // lightboxGestureArea, butonları içeren box-none katmanının ALTINDA render
+      // edilir. Butonlara yapılan dokunuşlar box-none'ın child'larına gider;
+      // bu view o zincirde yer almaz → buton tıklamaları etkilenmez.
+      // false bırakılırsa Android dokunuşu native'e teslim eder, onMove
+      // devreye giremez → swipe ve pinch çalışmaz.
+      onStartShouldSetPanResponder: () => true,
+      // 2 parmak capture: pinch başlangıcını hiçbir şey çalamaz
       onStartShouldSetPanResponderCapture: evt =>
         evt.nativeEvent.touches.length >= 2,
-
-      // ── Hareket fazında da kontrol et ─────────────────────────────────────────
-      onMoveShouldSetPanResponder: (evt, gs) => {
-        if (evt.nativeEvent.touches.length >= 2) return true;
-        // 1 parmak yatay kaydırma (zoom 1 iken) — yatay fark yeterli
-        if (currentZoomRef.current <= 1.05 && pinchDistRef.current === 0) {
-          return Math.abs(gs.dx) > 6;
-        }
-        return false;
-      },
+      onMoveShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponderCapture: evt =>
         evt.nativeEvent.touches.length >= 2,
 
@@ -255,7 +240,7 @@ export default function AktuelDetailScreen({ route }: Props) {
         }
         contentContainerStyle={[
           styles.listContainer,
-          { paddingBottom: insets.bottom + bannerHeight + 16 },
+          { paddingBottom: insets.bottom + 16 },
         ]}
         renderItem={({ item }) => {
           if (item.type === 'footer') {
@@ -410,20 +395,6 @@ export default function AktuelDetailScreen({ route }: Props) {
         </View>
       </Modal>
 
-      {/* ── Anchored Banner — ekranın sabit altında, scroll etmez ── */}
-      {/* lightboxIndex >= 0 iken gizle: transparent Modal üstünde görünür,
-          bu accidental click riski = AdMob politika ihlali */}
-      {!bannerFailed && lightboxIndex < 0 && (
-        <View style={[styles.bannerContainer, { bottom: insets.bottom }]}>
-          <BannerAd
-            unitId={BANNER_UNIT_ID}
-            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-            onAdLoaded={e => setBannerHeight(e.height)}
-            onAdFailedToLoad={() => setBannerFailed(true)}
-          />
-        </View>
-      )}
     </View>
   );
 }
@@ -534,10 +505,4 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   thumbImage: { width: '100%', height: '100%' },
-  bannerContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
 });

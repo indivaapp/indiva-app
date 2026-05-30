@@ -1,4 +1,11 @@
 apply plugin: "com.android.application"
+
+// Keystore bilgileri local.properties'den okunur (git'e gitmez)
+def keystoreProps = new Properties()
+def keystorePropsFile = rootProject.file('local.properties')
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 apply plugin: "com.google.gms.google-services"
@@ -83,8 +90,8 @@ android {
         applicationId "com.indiva.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 13
-        versionName "3.0.0"
+        versionCode 17
+        versionName "3.1.0"
         externalNativeBuild {
             cmake {
                 arguments "-DCMAKE_BUILD_PARALLEL_LEVEL=2"
@@ -99,10 +106,10 @@ android {
             keyPassword 'android'
         }
         release {
-            storeFile file('indiva-release.keystore')
-            storePassword 'Raunen?_123'
-            keyAlias 'indiva'
-            keyPassword 'Raunen?_123'
+            storeFile file(keystoreProps['KEYSTORE_PATH'])
+            storePassword keystoreProps['KEYSTORE_PASSWORD']
+            keyAlias keystoreProps['KEY_ALIAS']
+            keyPassword keystoreProps['KEY_PASSWORD']
         }
     }
     buildTypes {

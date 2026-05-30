@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SponsoredStoryCard from '../components/SponsoredStoryCard';
 import { Colors } from '../constants/colors';
 import { tsToMs } from '../utils/time';
+import { suppressAppOpen } from '../services/appOpenControl';
 import type { RootStackParamList } from '../navigation';
 import type { Story } from '../types';
 
@@ -34,7 +35,7 @@ const DISMISS_THRESHOLD = 100;
 const UP_SWIPE_THRESHOLD = 80;
 const LONG_PRESS_DELAY = 150;
 // Her kaç doğal (timer tamamlanan) geçişte bir sponsorlu story gösterilsin
-const SPONSORED_EVERY_N = 3;
+const SPONSORED_EVERY_N = 5;
 
 
 function timeAgo(timestamp: any): string {
@@ -129,7 +130,7 @@ export default function StoryDetailScreen({ route }: Props) {
     return () => loop.stop();
   }, [chevronBounce]);
 
-  // Reset swipe-up hint visibility on each story, fade out after 3 seconds
+  // Reset swipe-up hint visibility on each story, fade out after 1 second
   useEffect(() => {
     const hasLink = !!(stories[currentIndex]?.affiliateLink || stories[currentIndex]?.link || stories[currentIndex]?.productLink || stories[currentIndex]?.url);
     if (!hasLink) return;
@@ -142,7 +143,7 @@ export default function StoryDetailScreen({ route }: Props) {
         useNativeDriver: true,
       });
       swipeHintFadeRef.current.start();
-    }, 3000);
+    }, 1000);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex]);
@@ -256,7 +257,14 @@ export default function StoryDetailScreen({ route }: Props) {
       useNativeDriver: true,
     });
     animRef.current.start(({ finished }) => {
-      if (finished) goToRef.current(idx + 1, 'next');
+      if (!finished) return;
+      naturalAdvanceCountRef.current += 1;
+      if (naturalAdvanceCountRef.current % SPONSORED_EVERY_N === 0 && adLoadedRef.current) {
+        pendingAfterSponsoredRef.current = idx + 1;
+        setSponsoredVisible(true);
+      } else {
+        goToRef.current(idx + 1, 'next');
+      }
     });
   }, [progressAnims]);
 
@@ -661,6 +669,7 @@ export default function StoryDetailScreen({ route }: Props) {
     const link = storyLinkRef.current;
     if (!link) return;
     try {
+      suppressAppOpen();
       await Linking.openURL(link);
     } catch {
       Alert.alert('Hata', 'Bağlantı açılırken bir sorun oluştu.');

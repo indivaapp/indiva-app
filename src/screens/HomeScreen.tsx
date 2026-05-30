@@ -28,7 +28,7 @@ import {
   saveHomeCache,
 } from '../services/firebaseService';
 import NativeAdCard from '../components/NativeAdCard';
-import { getVotes, isDiscountExpired, isHiddenFromFeed, loadVotesCache, Votes } from '../services/voteService';
+import { isDiscountExpired, isHiddenFromFeed, loadVotesCache } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Discount, Story } from '../types';
 import DiscountCard from '../components/DiscountCard';
@@ -91,7 +91,6 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const catFetchIdRef     = useRef(0);
 
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [votes, setVotes] = useState<Votes>({});
   const [error, setError] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
@@ -162,7 +161,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   }, [stories, viewedStoryIds]);
 
   useEffect(() => {
-    loadVotesCache().then(() => setVotes(getVotes()));
+    loadVotesCache(); // isHiddenFromFeed için süre sayaçlarını yükler
     loadInitial();
     // İlk yükleme: cache varsa anında göster, bayatsa arka planda yenile ve UI'ı güncelle
     fetchStoriesCached(fresh => setStories(fresh)).then(s => {
@@ -298,7 +297,6 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     setError(null);
     try {
       await loadVotesCache();
-      setVotes(getVotes());
 
       if (selectedCategory === 'Tümü') {
         const result = await fetchDiscounts(null);
@@ -410,7 +408,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
       source = discounts.filter(d => normalizeCategory(d.category) === selectedCategory);
     }
     const lower = debouncedSearch.toLowerCase();
-    return source.filter(item => {
+    const filtered = source.filter(item => {
       if (isHiddenFromFeed(item.id)) return false;
       if (!lower) return true;
       return (
@@ -419,13 +417,17 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         item.category.toLowerCase().includes(lower)
       );
     });
+    // Sponsorlu ilanlar her zaman en başta sabit
+    return filtered.sort((a, b) => {
+      if (a.isAd && !b.isAd) return -1;
+      if (!a.isAd && b.isAd) return 1;
+      return 0;
+    });
   }, [discounts, catDiscounts, debouncedSearch, selectedCategory]);
 
 
-  type HomeSlot = { kind: 'discount'; item: Discount };
-  type HomeRow =
-    | { rowKey: string; layout: 'pair'; left: HomeSlot; right: HomeSlot | null }
-    | { rowKey: string; layout: 'ad' };
+  type HomeSlot = { kind: 'discount'; item: Discount } | { kind: 'ad'; adKey: string };
+  type HomeRow = { rowKey: string; layout: 'pair'; left: HomeSlot; right: HomeSlot | null };
 
   // ── Debounce: searchTerm → debouncedSearch (300ms) ───────────────
   useEffect(() => {
@@ -484,51 +486,55 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const isCategoryPending = selectedCategory !== 'Tümü' && catResultsFor !== selectedCategory;
 
   const listItems = useMemo<HomeRow[]>(() => {
-    const rows: HomeRow[] = [];
-    let pairCount = 0;
+    // Düz slot dizisi: her 6 ilandan sonra 1 reklam ekle.
+    // 6 ilan + 1 reklam = 7 (tek sayı) → 2'şerli pair'lere bölününce reklam
+    // bir satırda solda, sonrakinde sağda... şeklinde dönüşümlü yer alır.
+    const slots: HomeSlot[] = [];
     let adCount = 0;
-
-    for (let i = 0; i < filteredDiscounts.length; i += 2) {
-      const left: HomeSlot = { kind: 'discount', item: filteredDiscounts[i] };
-      const right: HomeSlot | null = filteredDiscounts[i + 1]
-        ? { kind: 'discount', item: filteredDiscounts[i + 1] }
-        : null;
-      rows.push({ rowKey: `row-${i}`, layout: 'pair', left, right });
-      pairCount++;
-
-      // İlk 3 pair reklamsız (kullanıcı önce içeriği görsün),
-      // sonrasında her 4 pair'de bir native ad satırı ekle (8 indirimde bir → ~%11 yoğunluk)
-      if (pairCount >= 3 && pairCount % 4 === 0) {
-        rows.push({ rowKey: `ad-${adCount++}`, layout: 'ad' });
+    for (let i = 0; i < filteredDiscounts.length; i++) {
+      slots.push({ kind: 'discount', item: filteredDiscounts[i] });
+      if ((i + 1) % 6 === 0) {
+        slots.push({ kind: 'ad', adKey: `home-ad-${adCount}` });
+        adCount++;
       }
+    }
+
+    const rows: HomeRow[] = [];
+    for (let i = 0; i < slots.length; i += 2) {
+      rows.push({
+        rowKey: `home-row-${i}`,
+        layout: 'pair',
+        left: slots[i],
+        right: slots[i + 1] ?? null,
+      });
     }
     return rows;
   }, [filteredDiscounts]);
 
   const renderDiscountSlot = useCallback((slot: HomeSlot | null) => {
     if (!slot) return <View style={styles.cardWrapper} />;
+    if (slot.kind === 'ad') {
+      return (
+        <View style={styles.cardWrapper}>
+          <NativeAdCard compact cacheKey={slot.adKey} />
+        </View>
+      );
+    }
     return (
       <View key={slot.item.id} style={styles.cardWrapper}>
         <DiscountCard
           discount={slot.item}
           isFavorite={favorites.includes(slot.item.id)}
           onToggleFavorite={() => handleToggleFavorite(slot.item.id)}
-          isExpired={isDiscountExpired(slot.item.id, votes)}
+          isExpired={isDiscountExpired(slot.item)}
           discountList={filteredDiscounts}
         />
       </View>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [favorites, votes, filteredDiscounts, handleToggleFavorite]);
+  }, [favorites, filteredDiscounts, handleToggleFavorite]);
 
   const renderItem = useCallback(({ item }: { item: HomeRow }) => {
-    if (item.layout === 'ad') {
-      return (
-        <View style={styles.adRow}>
-          <NativeAdCard />
-        </View>
-      );
-    }
     return (
       <View style={styles.row}>
         {renderDiscountSlot(item.left)}
@@ -856,10 +862,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardWrapper: { flex: 1 },
-  adRow: {
-    paddingHorizontal: 8,
-    marginBottom: 8,
-  },
   skeletonGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

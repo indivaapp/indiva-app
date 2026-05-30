@@ -12,10 +12,10 @@
     <!-- Bildirimler için izin (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
-    <!-- Kamera ve galeri (AffiliateFormScreen resim yükleme) -->
+    <!-- Galeri (AffiliateFormScreen resim seçimi — Android ≤12 için) -->
+    <!-- Android 13+ sistem photo picker izin gerektirmiyor, READ_MEDIA_IMAGES kaldırıldı -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
     <application
       android:name=".MainApplication"
@@ -27,14 +27,12 @@
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true">
 
-      <!-- AdMob Uygulama ID — kendi ID'nizle değiştirin -->
-      <!-- Format: ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY -->
+      <!-- AdMob Uygulama ID (canlı) — AdMob konsolundaki gerçek App ID -->
+      <!-- app.json içindeki android_app_id ile birebir aynı olmalı -->
       <meta-data
           android:name="com.google.android.gms.ads.APPLICATION_ID"
           android:value="ca-app-pub-3675503435035155~5154626230"
           tools:replace="android:value"/>
-      <!-- NOT: Yukarıdaki Google'ın test App ID'sidir.
-           Canlıya geçmeden önce AdMob konsolundan aldığınız gerçek ID ile değiştirin. -->
 
       <!-- Firebase Cloud Messaging -->
       <service

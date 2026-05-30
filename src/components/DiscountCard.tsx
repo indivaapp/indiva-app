@@ -14,6 +14,7 @@ import type { Discount } from '../types';
 import OptimizedImage from './OptimizedImage';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
+import { suppressAppOpen } from '../services/appOpenControl';
 import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -131,10 +132,11 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
   const handleGoToDiscount = async () => {
     try {
       if (isAd) {
-        if (discount.link) await Linking.openURL(discount.link);
+        if (discount.link) { suppressAppOpen(); await Linking.openURL(discount.link); }
         return;
       }
       if (!isExpired && !isServerExpired && discount.link) {
+        suppressAppOpen();
         await Linking.openURL(discount.link);
       }
     } catch {

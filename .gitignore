@@ -33,7 +33,6 @@ local.properties
 .cxx/
 *.keystore
 !debug.keystore
-!indiva-release.keystore
 .kotlin/
 
 # node.js
@@ -66,6 +65,9 @@ yarn-error.log
 
 # testing
 /coverage
+
+# Claude Code geçici worktree dosyaları (oturuma özel kopyalar)
+.claude/worktrees/
 
 # Yarn
 .yarn/*

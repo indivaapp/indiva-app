@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getDiscountById } from '../services/firebaseService';
-import { getVotes, isDiscountExpired, Votes, loadVotesCache } from '../services/voteService';
+import { isDiscountExpired } from '../services/voteService';
 import type { Discount } from '../types';
 import DiscountCard from '../components/DiscountCard';
 import NativeAdCard from '../components/NativeAdCard';
@@ -36,7 +36,6 @@ export default function FavoritesScreen() {
 
   const [favoriteDiscounts, setFavoriteDiscounts] = useState<Discount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [votes, setVotes] = useState<Votes>({});
   const [error, setError] = useState<string | null>(null);
 
   const bg = isDark ? Colors.gray900 : Colors.gray50;
@@ -45,9 +44,6 @@ export default function FavoritesScreen() {
   const fetchFavorites = useCallback(async () => {
     setError(null);
     try {
-      await loadVotesCache();
-      setVotes(getVotes());
-
       const stored = await AsyncStorage.getItem('favoriteDiscounts');
       const ids: string[] = stored ? JSON.parse(stored) : [];
 
@@ -109,16 +105,29 @@ export default function FavoritesScreen() {
     setFavoriteDiscounts(prev => prev.filter(d => d.id !== discountId));
     const stored = await AsyncStorage.getItem('favoriteDiscounts');
     const ids: string[] = stored ? JSON.parse(stored) : [];
-    await AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(ids.filter(id => id !== discountId)));
+    const newIds = ids.filter(id => id !== discountId);
+    await AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(newIds));
+    // Obj cache'i de güncelle — bir sonraki focus'ta gereksiz Firebase fetch'i önler
+    try {
+      const raw = await AsyncStorage.getItem(FAV_OBJ_CACHE_KEY);
+      if (raw) {
+        const cache: FavObjCache = JSON.parse(raw);
+        const newDiscounts = cache.discounts.filter(d => d.id !== discountId);
+        await AsyncStorage.setItem(
+          FAV_OBJ_CACHE_KEY,
+          JSON.stringify({ ids: newIds, discounts: newDiscounts, ts: cache.ts } satisfies FavObjCache),
+        );
+      }
+    } catch {}
   };
 
-  // Slot tabanlı liste: 4 ilan → 1 reklam → 4 ilan → ...
+  // Slot tabanlı liste: 7 ilan → 1 reklam → 7 ilan → ...
   const listItems = useMemo<FavRow[]>(() => {
     const slots: FavSlot[] = [];
     let adCount = 0;
     for (let i = 0; i < favoriteDiscounts.length; i++) {
       slots.push({ kind: 'discount', item: favoriteDiscounts[i] });
-      if ((i + 1) % 4 === 0) {
+      if ((i + 1) % 7 === 0) {
         adCount++;
         slots.push({ kind: 'ad', adKey: `fav-ad-${adCount}` });
       }
@@ -135,7 +144,7 @@ export default function FavoritesScreen() {
     if (slot.kind === 'ad') {
       return (
         <View style={styles.cardWrapper}>
-          <NativeAdCard />
+          <NativeAdCard compact cacheKey={slot.adKey} />
         </View>
       );
     }
@@ -145,13 +154,13 @@ export default function FavoritesScreen() {
           discount={slot.item}
           isFavorite
           onToggleFavorite={() => handleRemoveFavorite(slot.item.id)}
-          isExpired={isDiscountExpired(slot.item.id, votes)}
+          isExpired={isDiscountExpired(slot.item)}
           discountList={favoriteDiscounts}
         />
       </View>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [votes, favoriteDiscounts]);
+  }, [favoriteDiscounts]);
 
   const renderItem = useCallback(({ item }: { item: FavRow }) => (
     <View style={styles.row}>

@@ -111,7 +111,7 @@ async function sendMessage(text: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Cloud Function — yeni indirim eklendikçe Telegram kanalına gönderir
+// Cloud Function — yeni indirim eklendikçe Telegram kanalına gönder
 // ---------------------------------------------------------------------------
 export const onNewDiscount = functions
   .region('europe-west1')

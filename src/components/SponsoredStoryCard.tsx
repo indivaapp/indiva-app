@@ -8,15 +8,22 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
-import { NativeAd, NativeAdView, TestIds } from 'react-native-google-mobile-ads';
+import {
+  NativeAd,
+  NativeAdView,
+  NativeAsset,
+  NativeAssetType,
+  NativeMediaView,
+  TestIds,
+} from 'react-native-google-mobile-ads';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAdsReady } from '../../App';
+import { useAdsReady, useNonPersonalized } from '../../App';
 import { Colors } from '../constants/colors';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const AD_DURATION_MS = 5000;
 
-// Mevcut Native ad unit'i kullanıyoruz — format zaten native
+// Native Advanced reklam birimi
 const AD_UNIT_ID = __DEV__
   ? TestIds.NATIVE
   : 'ca-app-pub-3675503435035155/8909740660';
@@ -32,7 +39,8 @@ interface Props {
 
 export default function SponsoredStoryCard({ visible, onDismiss, onAdLoaded }: Props) {
   const insets = useSafeAreaInsets();
-  const adsReady = useAdsReady();
+  const adsReady        = useAdsReady();
+  const nonPersonalized = useNonPersonalized();
   const [nativeAd, setNativeAd] = useState<NativeAd | null>(null);
   const adRef = useRef<NativeAd | null>(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -45,7 +53,7 @@ export default function SponsoredStoryCard({ visible, onDismiss, onAdLoaded }: P
     if (!adsReady) return;
     let cancelled = false;
 
-    NativeAd.createForAdRequest(AD_UNIT_ID, { requestNonPersonalizedAdsOnly: true })
+    NativeAd.createForAdRequest(AD_UNIT_ID, { requestNonPersonalizedAdsOnly: nonPersonalized })
       .then(ad => {
         if (cancelled) { ad.destroy(); return; }
         adRef.current = ad;
@@ -86,62 +94,53 @@ export default function SponsoredStoryCard({ visible, onDismiss, onAdLoaded }: P
   // Görünmüyorsa veya ad yoksa: null render (ama component mount'ta kalır → pre-load devam eder)
   if (!visible || !nativeAd) return null;
 
-  const imageUrl = nativeAd.images?.[0]?.url;
-  const iconUrl  = nativeAd.icon?.url;
+  const iconUrl = nativeAd.icon?.url;
 
   return (
     <View style={StyleSheet.absoluteFill}>
+      {/* Düz koyu arka plan — reklam kreatifini değiştirmemek için blur/scrim kaldırıldı */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0d0d14' }]} />
+
       {/* ── NativeAdView: tüm reklam içeriği + tıklama kaydı ───────────── */}
       <NativeAdView nativeAd={nativeAd} style={StyleSheet.absoluteFill}>
 
-        {/* Blurlu arka plan */}
-        {imageUrl ? (
-          <Image
-            source={{ uri: imageUrl }}
-            style={StyleSheet.absoluteFill}
-            resizeMode="cover"
-            blurRadius={20}
-          />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1a1a2e' }]} />
-        )}
-        {/* Koyu örtü */}
-        <View style={[StyleSheet.absoluteFill, styles.scrim]} />
-
-        {/* Ana görsel */}
-        {imageUrl && (
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.mainImage}
-            resizeMode="contain"
-          />
-        )}
+        {/* Ana medya — MediaView ile gösterilir (politika gereği) */}
+        <NativeMediaView resizeMode="contain" style={styles.mainImage} />
 
         {/* Alt içerik: başlık + CTA */}
         <View style={[styles.bottomContent, { paddingBottom: insets.bottom + 80 }]}>
-          {iconUrl && (
-            <Image source={{ uri: iconUrl }} style={styles.advertiserIcon} resizeMode="cover" />
-          )}
+          {iconUrl ? (
+            <NativeAsset assetType={NativeAssetType.ICON}>
+              <Image source={{ uri: iconUrl }} style={styles.advertiserIcon} resizeMode="cover" />
+            </NativeAsset>
+          ) : null}
           {nativeAd.advertiser ? (
-            <Text style={styles.advertiserName} numberOfLines={1}>
-              {nativeAd.advertiser}
-            </Text>
+            <NativeAsset assetType={NativeAssetType.ADVERTISER}>
+              <Text style={styles.advertiserName} numberOfLines={1}>
+                {nativeAd.advertiser}
+              </Text>
+            </NativeAsset>
           ) : null}
           {nativeAd.headline ? (
-            <Text style={styles.headline} numberOfLines={2}>
-              {nativeAd.headline}
-            </Text>
+            <NativeAsset assetType={NativeAssetType.HEADLINE}>
+              <Text style={styles.headline} numberOfLines={2}>
+                {nativeAd.headline}
+              </Text>
+            </NativeAsset>
           ) : null}
           {nativeAd.body ? (
-            <Text style={styles.body} numberOfLines={2}>
-              {nativeAd.body}
-            </Text>
+            <NativeAsset assetType={NativeAssetType.BODY}>
+              <Text style={styles.body} numberOfLines={2}>
+                {nativeAd.body}
+              </Text>
+            </NativeAsset>
           ) : null}
           {nativeAd.callToAction ? (
-            // View kullan (TouchableOpacity değil) — NativeAdView kendi tıklama olayını yönetir
-            <View style={styles.ctaBtn}>
-              <Text style={styles.ctaText}>{nativeAd.callToAction}</Text>
-            </View>
+            <NativeAsset assetType={NativeAssetType.CALL_TO_ACTION}>
+              <View style={styles.ctaBtn}>
+                <Text style={styles.ctaText}>{nativeAd.callToAction}</Text>
+              </View>
+            </NativeAsset>
           ) : null}
         </View>
       </NativeAdView>
@@ -164,7 +163,7 @@ export default function SponsoredStoryCard({ visible, onDismiss, onAdLoaded }: P
         {/* Sponsorlu etiketi + Kapat */}
         <View style={styles.topRow}>
           <View style={styles.sponsoredBadge}>
-            <Text style={styles.sponsoredText}>Sponsorlu</Text>
+            <Text style={styles.sponsoredText}>REKLAM</Text>
           </View>
           {nativeAd.advertiser ? (
             <Text style={styles.advertiserLabel} numberOfLines={1}>
@@ -270,17 +269,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sponsoredBadge: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: '#4f46e5',
     borderRadius: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   sponsoredText: {
     color: Colors.white,
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   advertiserLabel: {
     color: 'rgba(255,255,255,0.8)',
