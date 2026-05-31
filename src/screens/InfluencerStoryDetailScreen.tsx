@@ -19,10 +19,12 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import SponsoredStoryCard from '../components/SponsoredStoryCard';
+import { InterstitialAd, AdEventType } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { tsToMs } from '../utils/time';
 import { suppressAppOpen } from '../services/appOpenControl';
+import { AD_UNITS } from '../constants/adUnits';
+import { useAdsReady, useNonPersonalized } from '../../App';
 import type { RootStackParamList } from '../navigation';
 import type { Story } from '../types';
 
@@ -166,11 +168,49 @@ export default function StoryDetailScreen({ route }: Props) {
   const goToRef = useRef<(n: number, d: 'next' | 'prev') => void>(() => {});
   const resumeRef = useRef<() => void>(() => {});
 
-  // ── Sponsored Story ─────────────────────────────────────────────
-  const [sponsoredVisible, setSponsoredVisible] = useState(false);
-  const naturalAdvanceCountRef = useRef(0);       // sadece timer tamamlanınca artar
-  const adLoadedRef             = useRef(false);   // SponsoredStoryCard'ın ad'ı yükleyince set eder
-  const pendingAfterSponsoredRef = useRef<number | null>(null); // sponsored sonrası gidilecek index
+  // ── Story Interstitial (Google tam ekran reklamı) ───────────────
+  const adsReady        = useAdsReady();
+  const nonPersonalized = useNonPersonalized();
+  const advanceCountRef = useRef(0);              // tüm İLERİ geçişlerde artar (otomatik + dokunma)
+  const interstitialRef = useRef<InterstitialAd | null>(null);
+  const interstitialLoadedRef = useRef(false);
+  const pendingAfterAdRef = useRef<number | null>(null); // interstitial kapanınca gidilecek index
+  const advanceForwardRef = useRef<(fromIndex: number) => void>(() => {});
+  const jumpToStoryRef = useRef<(index: number) => void>(() => {});
+
+  // Story interstitial — yükle; kapanınca sonraki story'e geç + yeniden yükle
+  useEffect(() => {
+    if (!adsReady) return;
+    const ad = InterstitialAd.createForAdRequest(AD_UNITS.interstitialStory, {
+      requestNonPersonalizedAdsOnly: nonPersonalized,
+    });
+    interstitialRef.current = ad;
+    interstitialLoadedRef.current = false;
+
+    const unsubLoaded = ad.addAdEventListener(AdEventType.LOADED, () => {
+      interstitialLoadedRef.current = true;
+    });
+    const unsubClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
+      interstitialLoadedRef.current = false;
+      const nextIdx = pendingAfterAdRef.current;
+      pendingAfterAdRef.current = null;
+      ad.load(); // bir sonraki gösterim için yeniden yükle
+      // Reklam sonrası DİREKT geçiş — slide animasyonu kullanma. App foreground'a
+      // dönerken native animasyon completion callback'i tetiklenmeyip story'yi
+      // dondurabiliyor; jumpToStory animasyonsuz, güvenli geçiş yapar.
+      if (nextIdx !== null) jumpToStoryRef.current(nextIdx);
+    });
+    const unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
+      interstitialLoadedRef.current = false;
+    });
+
+    ad.load();
+    return () => {
+      unsubLoaded(); unsubClosed(); unsubError();
+      interstitialRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adsReady, nonPersonalized]);
 
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
   // Reset copy feedback + backdrop state when navigating to a different story
@@ -198,6 +238,28 @@ export default function StoryDetailScreen({ route }: Props) {
   const imageReadyRef = useRef(false);
   const pendingStartRef = useRef(false);
 
+  // ── İleri geçiş + sponsorlu reklam tetikleyici ──────────────────
+  // Hem otomatik (timer) hem manuel (dokunma) ileri geçişler buradan geçer.
+  // Her SPONSORED_EVERY_N geçişte bir, reklam yüklüyse ve sıradaki story varsa
+  // sponsorlu reklam gösterilir; değilse normal ilerlenir.
+  const advanceForward = useCallback((fromIndex: number) => {
+    const nextIndex = fromIndex + 1;
+    advanceCountRef.current += 1;
+    if (
+      advanceCountRef.current % SPONSORED_EVERY_N === 0 &&
+      interstitialLoadedRef.current &&
+      nextIndex < stories.length
+    ) {
+      pendingAfterAdRef.current = nextIndex;
+      animRef.current?.stop();   // mevcut story timer'ını durdur (reklam sırasında tetiklenmesin)
+      suppressAppOpen();         // dönüşte App Open çıkmasın (reklam üstüne reklam)
+      interstitialRef.current?.show().catch(() => goToRef.current(nextIndex, 'next'));
+    } else {
+      goToRef.current(nextIndex, 'next');
+    }
+  }, [stories.length]);
+  advanceForwardRef.current = advanceForward;
+
   // ── Progress control ────────────────────────────────────────────
   const startProgress = useCallback((storyIndex: number, remainingMs = AUTO_ADVANCE_MS) => {
     isPausedRef.current = false;
@@ -219,15 +281,7 @@ export default function StoryDetailScreen({ route }: Props) {
     });
     animRef.current.start(({ finished }) => {
       if (!finished) return;
-      const nextIndex = storyIndex + 1;
-      naturalAdvanceCountRef.current += 1;
-      // Her SPONSORED_EVERY_N doğal geçişte bir ve ad yüklüyse → sponsored story göster
-      if (naturalAdvanceCountRef.current % SPONSORED_EVERY_N === 0 && adLoadedRef.current) {
-        pendingAfterSponsoredRef.current = nextIndex;
-        setSponsoredVisible(true);
-      } else {
-        goToRef.current(nextIndex, 'next');
-      }
+      advanceForwardRef.current(storyIndex);
     });
   }, [progressAnims]);
 
@@ -258,13 +312,7 @@ export default function StoryDetailScreen({ route }: Props) {
     });
     animRef.current.start(({ finished }) => {
       if (!finished) return;
-      naturalAdvanceCountRef.current += 1;
-      if (naturalAdvanceCountRef.current % SPONSORED_EVERY_N === 0 && adLoadedRef.current) {
-        pendingAfterSponsoredRef.current = idx + 1;
-        setSponsoredVisible(true);
-      } else {
-        goToRef.current(idx + 1, 'next');
-      }
+      advanceForwardRef.current(idx);
     });
   }, [progressAnims]);
 
@@ -330,6 +378,33 @@ export default function StoryDetailScreen({ route }: Props) {
       setCurrentIndex(nextIndex);
     });
   }, [incomingSlideX, slideScale, slideX, slideY, stories.length]);
+
+  // Animasyonsuz, güvenli geçiş — interstitial reklam sonrası kullanılır.
+  // Slide animasyonuna (ve onun completion callback'ine) bağımlı değildir → donma olmaz.
+  const jumpToStory = useCallback((index: number) => {
+    if (index < 0 || index >= stories.length) {
+      animateDismissRef.current();
+      return;
+    }
+    animRef.current?.stop();
+    if (timerRef.current) clearTimeout(timerRef.current);
+    isTransitioningRef.current = false;
+    transitionStoryIndexRef.current = null;
+    setTransitionStoryIndex(null);
+    isPausedRef.current = false;
+    isSwipingRef.current = false;
+    slideX.setValue(0);
+    slideY.setValue(0);
+    slideScale.setValue(1);
+    incomingSlideX.setValue(SCREEN_W);
+    bgOpacity.setValue(1);
+    // Yeni görsel yüklenince onLoad progress'i başlatır (isTransitioning=false olduğu için)
+    imageReadyRef.current = false;
+    pendingStartRef.current = false;
+    postTransitionRef.current = false;
+    setCurrentIndex(index);
+  }, [incomingSlideX, slideScale, slideX, slideY, bgOpacity, stories.length]);
+  jumpToStoryRef.current = jumpToStory;
 
   // Keep callback refs up-to-date every render
   useEffect(() => { goToRef.current = goTo; }, [goTo]);
@@ -738,7 +813,7 @@ export default function StoryDetailScreen({ route }: Props) {
           source={{ uri: story.productImage }}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
-          blurRadius={20}
+          blurRadius={14}
           onLoad={() => setBackdropReady(true)}
         />
       </View>
@@ -764,7 +839,7 @@ export default function StoryDetailScreen({ route }: Props) {
           source={{ uri: story.productImage }}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
-          blurRadius={22}
+          blurRadius={14}
         />
         {/* Semi-transparent scrim so the blurred bg doesn't compete with the main image */}
         <View pointerEvents="none" style={styles.blurScrim} />
@@ -816,7 +891,7 @@ export default function StoryDetailScreen({ route }: Props) {
             style={styles.tapRight}
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
-            onPress={() => { if (Date.now() - pressStartTimeRef.current < LONG_PRESS_DELAY) goTo(currentIndex + 1, 'next'); }}
+            onPress={() => { if (Date.now() - pressStartTimeRef.current < LONG_PRESS_DELAY) advanceForward(currentIndex); }}
             activeOpacity={1}
           />
         </View>
@@ -929,7 +1004,12 @@ export default function StoryDetailScreen({ route }: Props) {
               return (
                 <View key={i} style={styles.progressTrack}>
                   <Animated.View
-                    style={[styles.progressFill, { transform: [{ scaleX }] }]}
+                    style={[
+                      styles.progressFill,
+                      { transform: [{ scaleX }] },
+                      // Aktif (o anki) story → ilerleyen çubuk turuncu; diğerleri beyaz
+                      isCurrent && { backgroundColor: Colors.orange },
+                    ]}
                   />
                 </View>
               );
@@ -957,7 +1037,7 @@ export default function StoryDetailScreen({ route }: Props) {
           source={{ uri: incomingPanelStory.productImage }}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
-          blurRadius={22}
+          blurRadius={14}
         />
         <View style={styles.blurScrim} />
         <Image
@@ -967,18 +1047,8 @@ export default function StoryDetailScreen({ route }: Props) {
         />
       </Animated.View>
 
-      {/* ══ SPONSORED STORY — her zaman mount'ta, sadece visible=true'da görünür ══ */}
-      {/* Arka planda native ad pre-load edilir; timer tamamlanınca akış devam eder.  */}
-      <SponsoredStoryCard
-        visible={sponsoredVisible}
-        onAdLoaded={() => { adLoadedRef.current = true; }}
-        onDismiss={() => {
-          setSponsoredVisible(false);
-          const nextIdx = pendingAfterSponsoredRef.current;
-          pendingAfterSponsoredRef.current = null;
-          if (nextIdx !== null) goToRef.current(nextIdx, 'next');
-        }}
-      />
+      {/* Story interstitial reklamı Google tarafından tam ekran sunulur —
+          burada görsel bileşen yok; advanceForward içinde .show() ile gösterilir. */}
     </Animated.View>
   );
 }

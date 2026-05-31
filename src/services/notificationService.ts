@@ -98,6 +98,7 @@ export async function addNotification(
   body: string,
   discountId?: string,
   storyId?: string,
+  image?: string,
 ): Promise<Notification> {
   // Arka plan handler'ı cache yüklenmeden önce çalışabilir — güvence için yükle
   if (notificationsCache === null) {
@@ -113,6 +114,7 @@ export async function addNotification(
     read: false,
     discountId,
     storyId,
+    image,
     timestamp,
   };
   const updated = [newNotification, ...notifications].slice(0, 50);

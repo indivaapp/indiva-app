@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, Image,
-  Modal, Dimensions, ActivityIndicator, Animated, PanResponder, Easing,
+  Modal, Dimensions, ActivityIndicator, Animated, Easing,
   Platform, NativeModules,
 } from 'react-native';
+import {
+  GestureHandlerRootView, PinchGestureHandler, PanGestureHandler, State,
+} from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { fetchBrochuresByStore } from '../services/firebaseService';
 import OptimizedImage from '../components/OptimizedImage';
+import NativeAdCard from '../components/NativeAdCard';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
@@ -16,6 +20,7 @@ import type { Brochure } from '../types';
 
 type ListItem =
   | { type: 'brochure'; data: Brochure; index: number }
+  | { type: 'ad'; adKey: string }
   | { type: 'footer' };
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AktuelDetail'>;
@@ -31,23 +36,34 @@ export default function AktuelDetailScreen({ route }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [lightboxIndex, setLightboxIndex] = useState(-1);
-  // Lightbox swipe + pinch-zoom
+  // Lightbox geçiş animasyonu (next/prev slide)
   const lightboxSlide = useRef(new Animated.Value(0)).current;
-  const zoomScale     = useRef(new Animated.Value(1)).current;
+  // Pinch-zoom + pan — native-driven (react-native-gesture-handler + Animated)
+  const baseScale  = useRef(new Animated.Value(1)).current;  // sabitlenmiş zoom
+  const pinchScale = useRef(new Animated.Value(1)).current;  // canlı pinch
+  const scale      = useRef(Animated.multiply(baseScale, pinchScale)).current;
+  const transX     = useRef(new Animated.Value(0)).current;
+  const transY     = useRef(new Animated.Value(0)).current;
+  const lastScale  = useRef(1);
+  const lastTrans  = useRef({ x: 0, y: 0 });
+  const pinchRef   = useRef<any>(null);
+  const panRef     = useRef<any>(null);
+
   const lightboxIndexRef  = useRef(lightboxIndex);
   const brochuresRef      = useRef(brochures);
   const thumbListRef      = useRef<any>(null);
   const changeLightboxRef = useRef<(idx: number, dir: 'next' | 'prev') => void>(() => {});
-  const currentZoomRef    = useRef(1);   // mirrors zoomScale without addListener
-  const pinchDistRef      = useRef(0);   // initial distance between 2 fingers
-  const pinchScaleRef     = useRef(1);   // scale at pinch start
   lightboxIndexRef.current = lightboxIndex;
   brochuresRef.current     = brochures;
 
   const resetZoom = useCallback(() => {
-    zoomScale.setValue(1);
-    currentZoomRef.current = 1;
-  }, [zoomScale]);
+    lastScale.current = 1;
+    lastTrans.current = { x: 0, y: 0 };
+    baseScale.setValue(1);
+    pinchScale.setValue(1);
+    transX.setOffset(0); transX.setValue(0);
+    transY.setOffset(0); transY.setValue(0);
+  }, [baseScale, pinchScale, transX, transY]);
 
   const changeLightboxIndex = useCallback((newIndex: number, dir: 'next' | 'prev') => {
     resetZoom();
@@ -70,89 +86,83 @@ export default function AktuelDetailScreen({ route }: Props) {
 
   changeLightboxRef.current = changeLightboxIndex;
 
-  const lightboxPan = useRef(
-    PanResponder.create({
-      // ── Her dokunuşu baştan claim et ──────────────────────────────────────────
-      // lightboxGestureArea, butonları içeren box-none katmanının ALTINDA render
-      // edilir. Butonlara yapılan dokunuşlar box-none'ın child'larına gider;
-      // bu view o zincirde yer almaz → buton tıklamaları etkilenmez.
-      // false bırakılırsa Android dokunuşu native'e teslim eder, onMove
-      // devreye giremez → swipe ve pinch çalışmaz.
-      onStartShouldSetPanResponder: () => true,
-      // 2 parmak capture: pinch başlangıcını hiçbir şey çalamaz
-      onStartShouldSetPanResponderCapture: evt =>
-        evt.nativeEvent.touches.length >= 2,
-      onMoveShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponderCapture: evt =>
-        evt.nativeEvent.touches.length >= 2,
-
-      // ── Grant: yeni gesture başlarken state sıfırla ───────────────────────────
-      onPanResponderGrant: evt => {
-        if (evt.nativeEvent.touches.length >= 2) {
-          pinchDistRef.current = 0;
-          pinchScaleRef.current = currentZoomRef.current;
-        } else {
-          lightboxSlide.stopAnimation();
-        }
-      },
-
-      onPanResponderMove: (evt, gs) => {
-        const touches = evt.nativeEvent.touches;
-        if (touches.length >= 2) {
-          // ── Pinch zoom ─────────────────────────────────────────────────────────
-          if (pinchDistRef.current === 0) {
-            const dx = touches[0].pageX - touches[1].pageX;
-            const dy = touches[0].pageY - touches[1].pageY;
-            pinchDistRef.current = Math.sqrt(dx * dx + dy * dy);
-            pinchScaleRef.current = currentZoomRef.current;
-            lightboxSlide.setValue(0);
-          }
-          const dx = touches[0].pageX - touches[1].pageX;
-          const dy = touches[0].pageY - touches[1].pageY;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const next = Math.max(1, Math.min(4, pinchScaleRef.current * (dist / pinchDistRef.current)));
-          zoomScale.setValue(next);
-          currentZoomRef.current = next;
-        } else if (pinchDistRef.current === 0 && currentZoomRef.current <= 1.05) {
-          // ── 1 parmak kaydırma (yalnızca zoom = 1 iken) ────────────────────────
-          lightboxSlide.setValue(gs.dx);
-        }
-      },
-
-      onPanResponderRelease: (_, gs) => {
-        const wasPinching = pinchDistRef.current > 0;
-        pinchDistRef.current = 0;
-
-        // Çok az zoom'da 1'e döndür
-        if (currentZoomRef.current < 1.15) {
-          Animated.spring(zoomScale, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }).start();
-          currentZoomRef.current = 1;
-        }
-
-        if (!wasPinching) {
-          // ── Geçiş kararı ───────────────────────────────────────────────────────
-          const idx = lightboxIndexRef.current;
-          const len = brochuresRef.current.length;
-          const threshold = SCREEN_W * 0.25;
-          if ((gs.dx < -threshold || (gs.dx < -30 && gs.vx < -0.5)) && idx < len - 1) {
-            changeLightboxRef.current(idx + 1, 'next');
-          } else if ((gs.dx > threshold || (gs.dx > 30 && gs.vx > 0.5)) && idx > 0) {
-            changeLightboxRef.current(idx - 1, 'prev');
-          } else {
-            Animated.spring(lightboxSlide, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
-          }
-        } else {
-          // Pinch bitti — slide sıfırla
-          Animated.spring(lightboxSlide, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
-        }
-      },
-
-      onPanResponderTerminate: () => {
-        pinchDistRef.current = 0;
-        Animated.spring(lightboxSlide, { toValue: 0, friction: 8, tension: 120, useNativeDriver: true }).start();
-      },
-    })
+  // ── Pinch (zoom) — native-driven ─────────────────────────────────────────────
+  const onPinchEvent = useRef(
+    Animated.event([{ nativeEvent: { scale: pinchScale } }], { useNativeDriver: true })
   ).current;
+
+  const onPinchStateChange = useCallback((e: any) => {
+    if (e.nativeEvent.oldState === State.ACTIVE) {
+      let next = lastScale.current * e.nativeEvent.scale;
+      next = Math.max(1, Math.min(4, next)); // 1x–4x sınırı
+      lastScale.current = next;
+      baseScale.setValue(next);
+      pinchScale.setValue(1);
+      if (next <= 1.02) {
+        // Tam uzaklaştı → sıfırla ve görseli ortala
+        lastScale.current = 1;
+        baseScale.setValue(1);
+        lastTrans.current = { x: 0, y: 0 };
+        transX.setOffset(0); transY.setOffset(0);
+        Animated.parallel([
+          Animated.spring(transX, { toValue: 0, useNativeDriver: true }),
+          Animated.spring(transY, { toValue: 0, useNativeDriver: true }),
+        ]).start();
+      }
+    }
+  }, [baseScale, pinchScale, transX, transY]);
+
+  // ── Pan — zoom'luyken görseli kaydır, zoom yokken sayfa geçişi ────────────────
+  const onPanEvent = useRef(
+    Animated.event(
+      [{ nativeEvent: { translationX: transX, translationY: transY } }],
+      { useNativeDriver: true }
+    )
+  ).current;
+
+  const onPanStateChange = useCallback((e: any) => {
+    const { state, oldState, translationX, translationY } = e.nativeEvent;
+
+    if (state === State.BEGAN) {
+      // Gesture başında offset'i sabitlenmiş konuma al (üstüne canlı hareket eklenir)
+      transX.setOffset(lastTrans.current.x); transX.setValue(0);
+      transY.setOffset(lastTrans.current.y); transY.setValue(0);
+      return;
+    }
+
+    if (oldState === State.ACTIVE) {
+      if (lastScale.current > 1) {
+        // Zoom'lu → kaydırmayı görsel sınırları içinde sabitle
+        const maxX = (SCREEN_W * (lastScale.current - 1)) / 2;
+        const maxY = (SCREEN_H * (lastScale.current - 1)) / 2;
+        const nx = Math.max(-maxX, Math.min(maxX, lastTrans.current.x + translationX));
+        const ny = Math.max(-maxY, Math.min(maxY, lastTrans.current.y + translationY));
+        lastTrans.current = { x: nx, y: ny };
+        transX.setOffset(nx); transX.setValue(0);
+        transY.setOffset(ny); transY.setValue(0);
+      } else {
+        // Zoom yok → görseli ortala; yatay swipe yeterse sayfa geçişi yap
+        transX.setOffset(0); transY.setOffset(0);
+        lastTrans.current = { x: 0, y: 0 };
+        const idx = lightboxIndexRef.current;
+        const len = brochuresRef.current.length;
+        const threshold = SCREEN_W * 0.22;
+        if (translationX < -threshold && idx < len - 1) {
+          transX.setValue(0); transY.setValue(0);
+          changeLightboxRef.current(idx + 1, 'next');
+        } else if (translationX > threshold && idx > 0) {
+          transX.setValue(0); transY.setValue(0);
+          changeLightboxRef.current(idx - 1, 'prev');
+        } else {
+          // Eşik altı → görseli yumuşakça ortaya geri getir
+          Animated.parallel([
+            Animated.spring(transX, { toValue: 0, useNativeDriver: true }),
+            Animated.spring(transY, { toValue: 0, useNativeDriver: true }),
+          ]).start();
+        }
+      }
+    }
+  }, [transX, transY]);
 
   // Scroll thumbnail strip to active item
   useEffect(() => {
@@ -178,6 +188,14 @@ export default function AktuelDetailScreen({ route }: Props) {
     setNavBarColor(isDark ? Colors.gray900 : Colors.gray50, !isDark);
     return () => setNavBarColor(isDark ? Colors.gray900 : Colors.gray50, !isDark);
   }, [isDark, setNavBarColor]));
+
+  // Lightbox'ı kapat — ✕ butonu ve donanım geri tuşu (onRequestClose) ortak kullanır.
+  // Nav bar rengini de geri alır (Android'de Modal onDismiss tetiklenmez).
+  const closeLightbox = useCallback(() => {
+    setLightboxIndex(-1);
+    resetZoom();
+    setNavBarColor(isDark ? Colors.gray900 : Colors.gray50, !isDark);
+  }, [resetZoom, setNavBarColor, isDark]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -226,8 +244,14 @@ export default function AktuelDetailScreen({ route }: Props) {
   }
 
   const listData: ListItem[] = [];
+  let adCount = 0;
   brochures.forEach((item, i) => {
     listData.push({ type: 'brochure', data: item, index: i });
+    // Her 4 broşürde bir tam genişlik native reklam (akış içi, güvenli)
+    if ((i + 1) % 4 === 0) {
+      listData.push({ type: 'ad', adKey: `aktuel-${storeName}-ad-${adCount}` });
+      adCount++;
+    }
   });
   listData.push({ type: 'footer' });
 
@@ -236,7 +260,9 @@ export default function AktuelDetailScreen({ route }: Props) {
       <FlatList
         data={listData}
         keyExtractor={item =>
-          item.type === 'brochure' ? item.data.id : '__footer__'
+          item.type === 'brochure' ? item.data.id
+          : item.type === 'ad' ? item.adKey
+          : '__footer__'
         }
         contentContainerStyle={[
           styles.listContainer,
@@ -244,8 +270,11 @@ export default function AktuelDetailScreen({ route }: Props) {
         ]}
         renderItem={({ item }) => {
           if (item.type === 'footer') {
-            // Footer — sadece alt boşluk, reklam yok
             return <View style={{ height: 16 }} />;
+          }
+          if (item.type === 'ad') {
+            // Akış içi tam genişlik native reklam (havuz cache'li)
+            return <NativeAdCard cacheKey={item.adKey} />;
           }
           const { data, index } = item;
           return (
@@ -284,26 +313,47 @@ export default function AktuelDetailScreen({ route }: Props) {
         transparent
         animationType="fade"
         onShow={() => setNavBarColor('#000000', false)}
+        onRequestClose={closeLightbox}
         onDismiss={() => setNavBarColor(isDark ? Colors.gray900 : Colors.gray50, !isDark)}
       >
-        <View style={styles.lightboxBg}>
+        <GestureHandlerRootView style={styles.lightboxBg}>
           {lightboxIndex >= 0 && (
             <>
-              {/* ── Katman 1: Tam ekran gesture + görsel alanı ── */}
-              <View style={styles.lightboxGestureArea} {...lightboxPan.panHandlers}>
-                <Animated.View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    { transform: [{ translateX: lightboxSlide }] },
-                  ]}
-                >
-                  <Animated.Image
-                    source={{ uri: brochures[lightboxIndex].imageUrl }}
-                    style={[styles.lightboxImage, { transform: [{ scale: zoomScale }] }]}
-                    resizeMode="contain"
-                  />
+              {/* ── Katman 1: Pinch-zoom + pan + swipe görsel alanı ── */}
+              <PinchGestureHandler
+                ref={pinchRef}
+                simultaneousHandlers={panRef}
+                onGestureEvent={onPinchEvent}
+                onHandlerStateChange={onPinchStateChange}
+              >
+                <Animated.View style={StyleSheet.absoluteFill}>
+                  <PanGestureHandler
+                    ref={panRef}
+                    simultaneousHandlers={pinchRef}
+                    avgTouches
+                    minPointers={1}
+                    maxPointers={2}
+                    onGestureEvent={onPanEvent}
+                    onHandlerStateChange={onPanStateChange}
+                  >
+                    <Animated.View
+                      style={[
+                        StyleSheet.absoluteFill,
+                        { transform: [{ translateX: lightboxSlide }] },
+                      ]}
+                    >
+                      <Animated.Image
+                        source={{ uri: brochures[lightboxIndex].imageUrl }}
+                        style={[
+                          styles.lightboxImage,
+                          { transform: [{ translateX: transX }, { translateY: transY }, { scale }] },
+                        ]}
+                        resizeMode="contain"
+                      />
+                    </Animated.View>
+                  </PanGestureHandler>
                 </Animated.View>
-              </View>
+              </PinchGestureHandler>
 
               {/* ── Katman 2: UI kontrolleri — box-none ile gesture'ı bloklamaz ── */}
               <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -348,7 +398,7 @@ export default function AktuelDetailScreen({ route }: Props) {
                 {/* Kapat */}
                 <TouchableOpacity
                   style={styles.closeBtnLB}
-                  onPress={() => { setLightboxIndex(-1); resetZoom(); }}
+                  onPress={closeLightbox}
                 >
                   <Text style={{ color: Colors.white, fontSize: 18, fontWeight: '800' }}>✕</Text>
                 </TouchableOpacity>
@@ -392,7 +442,7 @@ export default function AktuelDetailScreen({ route }: Props) {
               </View>
             </>
           )}
-        </View>
+        </GestureHandlerRootView>
       </Modal>
 
     </View>

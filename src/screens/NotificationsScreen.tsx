@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Animated, PanResponder,
+  Animated, PanResponder, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -141,6 +141,11 @@ function SwipeableNotification({
               {notification.body}
             </Text>
           </View>
+
+          {/* Bildirim görseli (varsa) */}
+          {notification.image ? (
+            <Image source={{ uri: notification.image }} style={styles.notifThumb} resizeMode="cover" />
+          ) : null}
 
           {/* Chevron if tappable */}
           {(notification.discountId || notification.storyId) ? (
@@ -359,6 +364,7 @@ const styles = StyleSheet.create({
   timeText: { fontSize: 11, flexShrink: 0 },
   notifBody: { fontSize: 13, lineHeight: 18 },
   chevron: { fontSize: 22, fontWeight: '300', marginLeft: 2 },
+  notifThumb: { width: 46, height: 46, borderRadius: 8, marginLeft: 8, backgroundColor: 'rgba(127,127,127,0.15)' },
 
   // ── Empty state ───────────────────────────────────────────────────
   emptyContainer: {

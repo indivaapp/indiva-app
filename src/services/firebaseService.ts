@@ -219,7 +219,10 @@ const isAdExpired = (discount: Discount): boolean => {
 const filterDiscounts = (discounts: Discount[]): Discount[] =>
   discounts.filter(discount => {
     if (isAdExpired(discount)) return false;
-    if (discount.status === 'İndirim Bitti') return false;
+
+    // "İndirim Bitti" + deleteAt → 1 saatlik kaldırma penceresi.
+    // Sayaç dolana (deleteAt geçene) kadar ilanı feed'de TUT; DiscountCard onu
+    // gri/soluk + geri sayım olarak çizer. Sayaç dolunca feed'den de düşer.
     if (discount.deleteAt) {
       const dt = discount.deleteAt as any;
       const deleteAtMs =
@@ -228,8 +231,13 @@ const filterDiscounts = (discounts: Discount[]): Discount[] =>
           : dt instanceof Date
           ? dt.getTime()
           : new Date(dt).getTime();
-      if (deleteAtMs && Date.now() > deleteAtMs) return false;
+      if (deleteAtMs && Date.now() > deleteAtMs) return false; // sayaç doldu → kaldır
+      return true; // pencere içinde → göster (kart geri sayımı işler)
     }
+
+    // deleteAt yoksa: süresi bittiği işaretlenmiş eski/sayaçsız ilanı gösterme.
+    if (discount.status === 'İndirim Bitti') return false;
+
     return true;
   });
 
@@ -314,36 +322,71 @@ export async function getDiscountById(id: string): Promise<Discount | null> {
 }
 
 /**
- * Tek bir ilanın GÜNCEL topluluk oy sayılarını Firestore'dan taze çeker.
- * Detay ekranı açıldığında çağrılır — feed cache'i oy sayılarını içermez/eskidir.
- * App cache'ini atlar (her zaman taze), tek doküman = 1 read.
+ * Tek bir ilanın GÜNCEL topluluk oy sayılarını Firestore'dan çeker.
+ * Detay ekranı açıldığında çağrılır. 45 sn'lik kısa bellek cache'i ile hızlı
+ * geri-dön (detaya tekrar girme) durumlarında gereksiz read yapılmaz.
+ * Kullanıcı oy verince invalidateDiscountVotes(id) ile cache geçersiz kılınır.
  */
-export async function fetchDiscountVotes(
-  id: string,
-): Promise<{ activeVotes: number; expiredVotes: number } | null> {
+type VoteCounts = { activeVotes: number; expiredVotes: number };
+const _voteCache = new Map<string, { v: VoteCounts; ts: number }>();
+const VOTE_CACHE_TTL = 45 * 1000; // 45 sn
+
+export function invalidateDiscountVotes(id: string): void {
+  _voteCache.delete(id);
+}
+
+export async function fetchDiscountVotes(id: string): Promise<VoteCounts | null> {
+  const cached = _voteCache.get(id);
+  if (cached && Date.now() - cached.ts < VOTE_CACHE_TTL) return cached.v;
+
   try {
     const snap = await withTimeout(getDoc(doc(db, 'discounts', id)), 8000, 'Oy sayısı');
     if (!snap.exists()) return null;
     const data = snap.data() as any;
-    return {
+    const v: VoteCounts = {
       activeVotes: typeof data?.activeVotes === 'number' ? data.activeVotes : 0,
       expiredVotes: typeof data?.expiredVotes === 'number' ? data.expiredVotes : 0,
     };
+    _voteCache.set(id, { v, ts: Date.now() });
+    return v;
   } catch {
     return null;
   }
 }
 
+// Broşürler günlük/haftalık değişir → 3 saat cache UX'i bozmaz, her sekmede 20 read'i önler.
+const BROCHURE_CACHE_TTL = 3 * 60 * 60 * 1000; // 3 saat
+const BROCHURE_CACHE_PREFIX = 'indiva_brochures_v1_';
+
 export async function fetchBrochuresByStore(storeName: string): Promise<Brochure[]> {
+  const cacheKey = BROCHURE_CACHE_PREFIX + storeName;
+
+  // 1. Taze cache → 0 read
+  try {
+    const raw = await AsyncStorage.getItem(cacheKey);
+    if (raw) {
+      const cached = JSON.parse(raw) as { brochures: Brochure[]; ts: number };
+      if (Date.now() - cached.ts < BROCHURE_CACHE_TTL) return cached.brochures;
+    }
+  } catch {}
+
+  // 2. Firestore'dan çek + cache'le
   try {
     const col = collection(db, `circulars/${storeName}/brochures`);
     const q = query(col, orderBy('createdAt', 'desc'), limit(20));
     const documentSnapshots = await withTimeout(getDocs(q), 10000, 'Broşürler');
-    return documentSnapshots.docs.map(d => ({
+    const brochures = documentSnapshots.docs.map(d => ({
       id: d.id,
       ...d.data(),
     })) as Brochure[];
+    AsyncStorage.setItem(cacheKey, JSON.stringify({ brochures, ts: Date.now() })).catch(() => {});
+    return brochures;
   } catch {
+    // 3. Ağ hatası → bayat cache varsa onu döndür (boş ekran yerine)
+    try {
+      const raw = await AsyncStorage.getItem(cacheKey);
+      if (raw) return (JSON.parse(raw) as { brochures: Brochure[] }).brochures;
+    } catch {}
     return [];
   }
 }

@@ -21,7 +21,8 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { Colors } from './src/constants/colors';
 import RootNavigator from './src/navigation';
 import SplashScreen from './src/components/SplashScreen';
-import MobileAds, { AdsConsent, AdsConsentStatus, AppOpenAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
+import MobileAds, { AdsConsent, AdsConsentStatus, AppOpenAd, AdEventType } from 'react-native-google-mobile-ads';
+import { AD_UNITS } from './src/constants/adUnits';
 import {
   loadVotesCache,
 } from './src/services/voteService';
@@ -44,9 +45,7 @@ const { NavigationBar } = NativeModules;
 
 // ─── App Open Ad ──────────────────────────────────────────────────────────────
 // Uygulama arka plandan öne gelince gösterilir (soğuk açılış değil — UX dostu).
-const APP_OPEN_AD_UNIT_ID = __DEV__
-  ? TestIds.APP_OPEN
-  : 'ca-app-pub-3675503435035155/5332430335';
+const APP_OPEN_AD_UNIT_ID = AD_UNITS.appOpen;
 // Aynı kullanıcıya en erken kaç ms sonra tekrar gösterilsin (8 dakika)
 const APP_OPEN_MIN_INTERVAL_MS = 8 * 60 * 1000;
 

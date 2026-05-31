@@ -33,6 +33,7 @@ export interface Notification {
   read: boolean;
   discountId?: string;
   storyId?: string;
+  image?: string;
   timestamp?: number;
 }
 

@@ -25,7 +25,8 @@ setBackgroundMessageHandler(getMessaging(), async remoteMessage => {
   const body   = remoteMessage.notification?.body  || 'Yeni bir bildirim var!';
   const discountId = remoteMessage.data?.discountId;
   const storyId    = remoteMessage.data?.storyId;
-  await addNotification(title, body, discountId, storyId);
+  const image      = remoteMessage.notification?.android?.imageUrl || remoteMessage.data?.image || undefined;
+  await addNotification(title, body, discountId, storyId, image);
 });
 
 AppRegistry.registerComponent(appName, () => App);

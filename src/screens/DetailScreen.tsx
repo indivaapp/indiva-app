@@ -18,6 +18,7 @@ import {
   BackHandler,
   Platform,
   NativeModules,
+  InteractionManager,
 } from 'react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -27,7 +28,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { incrementVisitCount } from '../services/contributionService';
 import { suppressAppOpen } from '../services/appOpenControl';
 import Clipboard from '@react-native-clipboard/clipboard';
-import { getDiscountById, fetchDiscountsByCategory, fetchDiscountsByCategoryCached, fetchDiscountVotes } from '../services/firebaseService';
+import { getDiscountById, fetchDiscountsByCategory, fetchDiscountsByCategoryCached, fetchDiscountVotes, invalidateDiscountVotes } from '../services/firebaseService';
 import {
   isDiscountExpired, addVote,
   hasUserVoted, getUserVoteType, setExpireTimer, getExpireAt,
@@ -80,6 +81,8 @@ export default function DetailScreen({ route }: Props) {
   const [isLoading, setIsLoading] = useState(!routeDiscount);
   const [error, setError] = useState('');
   const [userVoted, setUserVoted] = useState(false);
+  const [voteCalculating, setVoteCalculating] = useState(false); // "hesaplanıyor" animasyon fazı
+  const [myVoteType, setMyVoteType] = useState<'active' | 'expired' | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const [lightboxVisible, setLightboxVisible] = useState(false);
@@ -140,6 +143,9 @@ export default function DetailScreen({ route }: Props) {
   const heartScale  = useRef(new Animated.Value(1)).current;
   const titleAnim   = useRef(new Animated.Value(0)).current;
   const priceAnim   = useRef(new Animated.Value(0)).current;
+  const voteCalcAnim   = useRef(new Animated.Value(0)).current;  // hesaplanıyor pulse
+  const voteRevealAnim = useRef(new Animated.Value(1)).current;  // sonuç reveal (varsayılan 1 = görünür)
+  const voteCalcTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Yerel navigasyon state'i — navigation.replace yerine in-place geçiş
   const [localDiscount, setLocalDiscount] = useState<Discount | null>(routeDiscount ?? null);
@@ -232,12 +238,22 @@ export default function DetailScreen({ route }: Props) {
     incrementVisitCount();
   }, [id]);
 
-  // Slide ile geçilen indirim değişince oy durumunu güncelle
+  // Slide ile geçilen indirim değişince oy durumunu güncelle + oy animasyon durumunu sıfırla
   useEffect(() => {
     if (!localDiscount?.id) return;
     setUserVoted(hasUserVoted(localDiscount.id));
+    setMyVoteType(null);
+    setVoteCalculating(false);
+    if (voteCalcTimerRef.current) { clearTimeout(voteCalcTimerRef.current); voteCalcTimerRef.current = null; }
+    voteCalcAnim.stopAnimation();
+    voteRevealAnim.setValue(1); // yeni ilanda (zaten oy verilmişse) sonuç doğrudan görünür
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localDiscount?.id]);
+
+  // Unmount'ta oy "hesaplanıyor" zamanlayıcısını temizle
+  useEffect(() => () => {
+    if (voteCalcTimerRef.current) clearTimeout(voteCalcTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!routeDiscount) {
@@ -284,18 +300,22 @@ export default function DetailScreen({ route }: Props) {
     similarLoadingRef.current = true;
     setSimilarLoading(true);
 
-    // Cache'den çek (session/persistent cache varsa çok kısa sürede döner)
-    fetchDiscountsByCategoryCached(targetCat, null)
-      .then(({ discounts, lastVisible, hasMore }) => {
-        setSimilarDiscounts(discounts.filter(d => d.id !== targetId));
-        setSimilarLastVisible(lastVisible);
-        setSimilarHasMore(hasMore);
-      })
-      .catch(() => {})
-      .finally(() => {
-        similarLoadingRef.current = false;
-        setSimilarLoading(false);
-      });
+    // Benzer ürün fetch'ini geçiş animasyonu bitene kadar ertele → açılış/slide akıcı kalır
+    const task = InteractionManager.runAfterInteractions(() => {
+      // Cache'den çek (session/persistent cache varsa çok kısa sürede döner)
+      fetchDiscountsByCategoryCached(targetCat, null)
+        .then(({ discounts, lastVisible, hasMore }) => {
+          setSimilarDiscounts(discounts.filter(d => d.id !== targetId));
+          setSimilarLastVisible(lastVisible);
+          setSimilarHasMore(hasMore);
+        })
+        .catch(() => {})
+        .finally(() => {
+          similarLoadingRef.current = false;
+          setSimilarLoading(false);
+        });
+    });
+    return () => task.cancel();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDiscountIdForView, displayedCategory]);
 
@@ -563,10 +583,30 @@ export default function DetailScreen({ route }: Props) {
   };
 
   const handleVote = async (voteType: 'active' | 'expired') => {
-    if (userVoted) return;
-    setUserVoted(true);                       // iyimser: butonu hemen kilitle
+    if (userVoted || voteCalculating) return;
+
+    // Oyu hemen kaydet + "hesaplanıyor" fazına gir (oranlar bu fazda gizlenir → flicker yok)
+    setMyVoteType(voteType);
+    setUserVoted(true);
+    setVoteCalculating(true);
+    voteCalcAnim.setValue(0);
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(voteCalcAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(voteCalcAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+      ]),
+    );
+    pulse.start();
+
+    const finish = () => { pulse.stop(); };
+
     const ok = await addVote(d.id, voteType);
-    if (!ok) { setUserVoted(false); return; } // Firestore yazımı başarısız → geri al
+    if (!ok) {
+      finish();
+      setUserVoted(false); setVoteCalculating(false); setMyVoteType(null);
+      return; // Firestore yazımı başarısız → geri al
+    }
+    invalidateDiscountVotes(d.id); // sonraki odakta taze sayı okunsun (iyimser artış ezilmesin)
 
     // İyimser sayım artışı — görüntülenen ilana yansıt (sonraki fetch'te sunucudan gelir)
     const field: 'activeVotes' | 'expiredVotes' = voteType === 'active' ? 'activeVotes' : 'expiredVotes';
@@ -574,9 +614,16 @@ export default function DetailScreen({ route }: Props) {
       disc && disc.id === d.id ? { ...disc, [field]: (disc[field] ?? 0) + 1 } : disc;
     setLocalDiscount(prev => bump(prev));
     setDiscount(prev => bump(prev));
-
     const bumped = { ...d, [field]: (d[field] ?? 0) + 1 };
     if (isDiscountExpired(bumped)) setExpireTimer(d.id);
+
+    // ~1.1 sn "hesaplanıyor" göster, sonra güncel oranları yumuşak bir reveal ile sun
+    voteCalcTimerRef.current = setTimeout(() => {
+      finish();
+      setVoteCalculating(false);
+      voteRevealAnim.setValue(0);
+      Animated.spring(voteRevealAnim, { toValue: 1, friction: 7, tension: 60, useNativeDriver: true }).start();
+    }, 1100);
   };
 
   const handleCopyCode = () => {
@@ -616,7 +663,7 @@ export default function DetailScreen({ route }: Props) {
             <Image
               source={{ uri: d.imageUrl }}
               style={StyleSheet.absoluteFill}
-              blurRadius={20}
+              blurRadius={14}
             />
             <OptimizedImage
               src={d.imageUrl}
@@ -858,16 +905,36 @@ export default function DetailScreen({ route }: Props) {
                     </TouchableOpacity>
                   </View>
                 </View>
+              ) : voteCalculating ? (
+                <View style={{ alignItems: 'center', gap: 10, paddingVertical: 10 }}>
+                  <ActivityIndicator size="small" color={Colors.orange} />
+                  <Animated.Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: '700',
+                      color: isDark ? Colors.gray300 : Colors.gray500,
+                      opacity: voteCalcAnim.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] }),
+                    }}
+                  >
+                    🤖 Güncel oylar hesaplanıyor…
+                  </Animated.Text>
+                </View>
               ) : (
-                <View style={{ gap: 8 }}>
+                <Animated.View
+                  style={{
+                    gap: 8,
+                    opacity: voteRevealAnim,
+                    transform: [{ translateY: voteRevealAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }],
+                  }}
+                >
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text style={{ color: Colors.gray400, fontSize: 12, fontWeight: '600' }}>📊 Topluluk Oyları</Text>
-                    <Text style={{ color: userVoteType === 'active' ? Colors.green500 : Colors.red500, fontSize: 12, fontWeight: '700' }}>
-                      {userVoteType === 'active' ? '✅ Oyunuz: Devam Ediyor' : '❌ Oyunuz: Bitti'}
+                    <Text style={{ color: (myVoteType ?? userVoteType) === 'active' ? Colors.green500 : Colors.red500, fontSize: 12, fontWeight: '700' }}>
+                      {(myVoteType ?? userVoteType) === 'active' ? '✅ Oyunuz: Devam Ediyor' : '❌ Oyunuz: Bitti'}
                     </Text>
                   </View>
                   {renderVoteBars(activeRatio, expiredRatio, isDark)}
-                </View>
+                </Animated.View>
               )}
               <Text style={[styles.voteFooter, { color: isDark ? Colors.gray600 : Colors.gray400 }]}>
                 🤖 Oylar algoritmamız tarafından değerlendiriliyor. Çoğunluk "bitti" dediğinde ilan otomatik kaldırılır.
@@ -887,23 +954,42 @@ export default function DetailScreen({ route }: Props) {
             <View>
               <Text style={[styles.similarTitle, { color: isDark ? Colors.gray200 : Colors.gray700 }]}>🛍️ Benzer Fırsatlar</Text>
               <View style={styles.similarGrid}>
-                {similarDiscounts.map(item => (
-                  <View key={item.id} style={styles.similarCard}>
-                    <DiscountCard
-                      discount={item}
-                      isFavorite={favorites.includes(item.id)}
-                      onToggleFavorite={() => {
-                        const next = favorites.includes(item.id)
-                          ? favorites.filter(f => f !== item.id)
-                          : [...favorites, item.id];
-                        setFavorites(next);
-                        AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(next));
-                      }}
-                      isExpired={isDiscountExpired(item)}
-                      discountList={similarDiscounts}
-                    />
-                  </View>
-                ))}
+                {(() => {
+                  // Her 6 ilandan sonra 1 compact native reklam (ana sayfadaki gibi).
+                  // flex-wrap 2 sütun olduğu için reklam bir sağ bir sol otomatik düşer.
+                  const items: Array<{ ad: false; deal: Discount } | { ad: true; key: string }> = [];
+                  let adCount = 0;
+                  similarDiscounts.forEach((item, i) => {
+                    items.push({ ad: false, deal: item });
+                    if ((i + 1) % 6 === 0) {
+                      items.push({ ad: true, key: `similar-${d.id}-ad-${adCount}` });
+                      adCount++;
+                    }
+                  });
+                  return items.map(it =>
+                    it.ad ? (
+                      <View key={it.key} style={styles.similarCard}>
+                        <NativeAdCard compact cacheKey={it.key} />
+                      </View>
+                    ) : (
+                      <View key={it.deal.id} style={styles.similarCard}>
+                        <DiscountCard
+                          discount={it.deal}
+                          isFavorite={favorites.includes(it.deal.id)}
+                          onToggleFavorite={() => {
+                            const next = favorites.includes(it.deal.id)
+                              ? favorites.filter(f => f !== it.deal.id)
+                              : [...favorites, it.deal.id];
+                            setFavorites(next);
+                            AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(next));
+                          }}
+                          isExpired={isDiscountExpired(it.deal)}
+                          discountList={similarDiscounts}
+                        />
+                      </View>
+                    ),
+                  );
+                })()}
               </View>
               {similarLoading && (
                 <ActivityIndicator
@@ -935,7 +1021,7 @@ export default function DetailScreen({ route }: Props) {
                 <Image
                   source={{ uri: inc.imageUrl }}
                   style={StyleSheet.absoluteFill}
-                  blurRadius={20}
+                  blurRadius={14}
                 />
                 <OptimizedImage
                   src={inc.imageUrl}

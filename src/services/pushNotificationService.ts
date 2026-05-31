@@ -140,7 +140,13 @@ export function onMessageListener(
     const body = remoteMessage.notification?.body || 'Yeni bir indirim fırsatı var!';
     const discountId = remoteMessage.data?.discountId as string | undefined;
     const storyId = remoteMessage.data?.storyId as string | undefined;
-    await addNotification(title, body, discountId, storyId);
+    // Görsel: top-level notification.image → RN'de notification.android.imageUrl;
+    // Cloud Function yolunda data.image olarak da gelebilir.
+    const image =
+      (remoteMessage.notification as any)?.android?.imageUrl ||
+      (remoteMessage.data?.image as string | undefined) ||
+      undefined;
+    await addNotification(title, body, discountId, storyId, image);
     callback(remoteMessage);
   });
   return unsubscribe;

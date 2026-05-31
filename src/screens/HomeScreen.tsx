@@ -14,6 +14,7 @@ import {
   Modal,
   Animated,
   AppState,
+  Image,
 } from 'react-native';
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -443,7 +444,14 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     const timer = setTimeout(() => {
       // Sadece 1 kategori prefetch — 36 read yerine 12 (persistent cache varsa 0)
       if (allCategories[1]) {
-        fetchDiscountsByCategoryCached(allCategories[1], null).catch(() => {});
+        fetchDiscountsByCategoryCached(allCategories[1], null)
+          .then(res => {
+            // İlk birkaç görseli de önceden indir → kategoriye tıklayınca görseller anında gelir
+            res.discounts.slice(0, 6).forEach(d => {
+              if (d.imageUrl) Image.prefetch(d.imageUrl).catch(() => {});
+            });
+          })
+          .catch(() => {});
       }
     }, 2000);
     return () => clearTimeout(timer);
@@ -831,7 +839,7 @@ const styles = StyleSheet.create({
   },
   searchIcon: { fontSize: 15 },
   searchInput: { flex: 1, fontSize: 14, padding: 0 },
-  categoriesScroll: { marginTop: 0, marginBottom: 8 },
+  categoriesScroll: { marginTop: 8, marginBottom: 8 },
   // Story bar yokken (kategori seçili / arama) üstte küçük boşluk ekle
   categoriesTopPad: { marginTop: 6 },
   categoriesContent: { paddingHorizontal: 12, gap: 8 },

@@ -174,19 +174,10 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
           backgroundColor: cardBg,
           borderColor,
           borderWidth: isAd || isFavorite ? 2 : 0,
-          opacity: isServerExpired ? 0.6 : 1,
+          opacity: isServerExpired ? 0.9 : 1,
         },
       ]}
     >
-      {/* Expired overlay */}
-      {isServerExpired && countdown && (
-        <View style={styles.expiredOverlay}>
-          <Text style={styles.expiredLabel}>🚩 İndirim Sona Erdi</Text>
-          <Text style={styles.countdown}>{countdown}</Text>
-          <Text style={styles.removedSoon}>sonra kaldırılacak</Text>
-        </View>
-      )}
-
       {isExpired && !isAd && !isServerExpired && (
         <View style={styles.votedExpiredOverlay}>
           <View style={styles.expiredBadge}>
@@ -214,6 +205,22 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
           containerStyle={StyleSheet.absoluteFill}
           resizeMode="cover"
         />
+
+        {/* İndirim bitti → görseli griye/soluğa çevir + 1 saatlik kaldırma sayacı */}
+        {isServerExpired && (
+          <>
+            <View style={styles.grayScrim} pointerEvents="none" />
+            <View style={styles.grayScrim2} pointerEvents="none" />
+            {countdown && (
+              <View style={styles.expiredOverlay} pointerEvents="none">
+                <Text style={styles.expiredLabel}>🚩 İndirim Sona Erdi</Text>
+                <Text style={styles.countdown}>{countdown}</Text>
+                <Text style={styles.removedSoon}>sonra kaldırılacak</Text>
+              </View>
+            )}
+          </>
+        )}
+
         {!isAd && timeAgo ? (
           <View style={styles.timeBadge}>
             <Text style={styles.timeBadgeText}>{timeAgo}</Text>
@@ -411,12 +418,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 4,
   },
+  // Görseli "soluk/gri" göstermek için iki katman (native bağımlılık yok):
+  // 1) orta-gri katman renkleri desature eder, 2) hafif beyaz katman kontrastı
+  // düşürerek soluk B&W hissi verir.
+  grayScrim: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(130,130,130,0.55)',
+    zIndex: 14,
+  },
+  grayScrim2: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    zIndex: 15,
+  },
   expiredOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(20,20,20,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 30,
+    zIndex: 16,
     gap: 2,
   },
   expiredLabel: {

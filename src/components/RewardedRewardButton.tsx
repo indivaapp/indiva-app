@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import {
-  RewardedAd, RewardedAdEventType, AdEventType, TestIds,
+  RewardedAd, RewardedAdEventType, AdEventType,
 } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
@@ -9,12 +9,10 @@ import { useAdsReady, useNonPersonalized } from '../../App';
 import {
   grantRewardedReward, getTodayPointsClaims, DAILY_POINTS_LIMIT, REWARD_POINTS,
 } from '../services/rewardService';
+import { AD_UNITS } from '../constants/adUnits';
 
-// ─── Ödüllü reklam birimi ───────────────────────────────────────────────────────
-// Geliştirmede Google test reklamı, canlıda AdMob'daki gerçek Rewarded birimi.
-const REWARDED_AD_UNIT_ID = __DEV__
-  ? TestIds.REWARDED
-  : 'ca-app-pub-3675503435035155/8795579926';
+// ─── Ödüllü reklam birimi (merkezi adUnits'ten) ──────────────────────────────────
+const REWARDED_AD_UNIT_ID = AD_UNITS.rewarded;
 
 interface Props {
   /** Ödül verilince çağrılır (pointsAwarded=0 ise günlük limit dolmuş demektir) */
@@ -116,9 +114,7 @@ export default function RewardedRewardButton({ onReward }: Props) {
       {disabled ? (
         <ActivityIndicator size="small" color="#fff" style={styles.spinner} />
       ) : (
-        <View style={styles.playWrap}>
-          <Text style={styles.playGlyph}>▶</Text>
-        </View>
+        <Text style={styles.clapper}>🎬</Text>
       )}
       <Text style={styles.pillText}>+{REWARD_POINTS} puan</Text>
     </TouchableOpacity>
@@ -132,7 +128,7 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: '#4f46e5',
     borderRadius: 20,
-    paddingLeft: 6,
+    paddingLeft: 10,
     paddingRight: 12,
     paddingVertical: 5,
     shadowColor: '#4f46e5',
@@ -144,18 +140,8 @@ const styles = StyleSheet.create({
   pillDisabled: {
     opacity: 0.55,
   },
-  playWrap: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playGlyph: {
-    color: '#fff',
-    fontSize: 9,
-    marginLeft: 1, // optik merkezleme
+  clapper: {
+    fontSize: 13, // 🎬 — video/reklam izleneceğini belirtir
   },
   spinner: {
     width: 18,

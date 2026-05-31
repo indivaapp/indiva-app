@@ -6,12 +6,12 @@ import {
   NativeAsset,
   NativeAssetType,
   NativeMediaView,
-  TestIds,
 } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import { useAdsReady, useNonPersonalized } from '../../App';
 import { getCachedNativeAd } from '../services/nativeAdPool';
+import { AD_UNITS } from '../constants/adUnits';
 
 // ─── Fallback promolar (reklam yüklenemediğinde gösterilir) ───────────────────
 const FALLBACK_PROMOS = [
@@ -24,9 +24,7 @@ const FALLBACK_PROMOS = [
 const PROMO_IDX = Math.floor(Math.random() * FALLBACK_PROMOS.length);
 
 // ─── Ad Unit ID ───────────────────────────────────────────────────────────────
-const NATIVE_AD_UNIT_ID = __DEV__
-  ? TestIds.NATIVE
-  : 'ca-app-pub-3675503435035155/8909740660';
+const NATIVE_AD_UNIT_ID = AD_UNITS.native;
 
 // ─── NativeAdCard ─────────────────────────────────────────────────────────────
 // compact=true    → grid slotuna tam oturan kart (DiscountCard boyutu)
