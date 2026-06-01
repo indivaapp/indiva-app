@@ -9,6 +9,12 @@ const USE_TEST_ADS = false;
 
 const useTest = __DEV__ || USE_TEST_ADS;
 
+// ─── Reklam yüzeyi bayrağı (AdMob onay süreci) ───────────────────────────────
+// false iken SADECE anasayfa akış native reklamı + interstitial + app-open gösterilir.
+// Aktüel, ürün detayı (yatay), benzer fırsatlar, favoriler ve profil native
+// yerleşimleri GEÇİCİ kapatılır. AdMob onayı alındıktan sonra true yapıp geri açarız.
+export const EXTRA_AD_PLACEMENTS = false;
+
 export const AD_UNITS = {
   // ── Şu an uygulamada AKTİF kullanılan birimler ──
   native:            useTest ? TestIds.NATIVE        : 'ca-app-pub-3675503435035155/8909740660',

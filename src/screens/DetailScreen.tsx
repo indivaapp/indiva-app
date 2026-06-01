@@ -24,6 +24,7 @@ import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/nativ
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NativeAdCard from '../components/NativeAdCard';
+import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { incrementVisitCount } from '../services/contributionService';
 import { suppressAppOpen } from '../services/appOpenControl';
@@ -733,8 +734,9 @@ export default function DetailScreen({ route }: Props) {
             <Text style={[styles.discountTitle, { color: textColor }]}>{d.title}</Text>
           </Animated.View>
 
-          {/* Native reklam — başlık ile fiyat arasında, yatay şerit */}
-          <NativeAdCard horizontal />
+          {/* Native reklam — yatay şerit. AdMob onayına kadar KAPALI
+              (AdChoices çakışma riski olan yerleşim). */}
+          {EXTRA_AD_PLACEMENTS && <NativeAdCard horizontal />}
 
           {/* ── Sponsorlu ilan açıklaması ───────────────────────────── */}
           {isAd && !!d.description && (
@@ -961,7 +963,8 @@ export default function DetailScreen({ route }: Props) {
                   let adCount = 0;
                   similarDiscounts.forEach((item, i) => {
                     items.push({ ad: false, deal: item });
-                    if ((i + 1) % 6 === 0) {
+                    // Benzer fırsatlar native reklamı — AdMob onayına kadar KAPALI
+                    if (EXTRA_AD_PLACEMENTS && (i + 1) % 6 === 0) {
                       items.push({ ad: true, key: `similar-${d.id}-ad-${adCount}` });
                       adCount++;
                     }

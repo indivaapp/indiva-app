@@ -13,6 +13,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { fetchBrochuresByStore } from '../services/firebaseService';
 import OptimizedImage from '../components/OptimizedImage';
 import NativeAdCard from '../components/NativeAdCard';
+import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
@@ -247,8 +248,8 @@ export default function AktuelDetailScreen({ route }: Props) {
   let adCount = 0;
   brochures.forEach((item, i) => {
     listData.push({ type: 'brochure', data: item, index: i });
-    // Her 4 broşürde bir tam genişlik native reklam (akış içi, güvenli)
-    if ((i + 1) % 4 === 0) {
+    // Her 4 broşürde bir tam genişlik native reklam — AdMob onayına kadar KAPALI
+    if (EXTRA_AD_PLACEMENTS && (i + 1) % 4 === 0) {
       listData.push({ type: 'ad', adKey: `aktuel-${storeName}-ad-${adCount}` });
       adCount++;
     }

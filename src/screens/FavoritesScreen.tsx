@@ -11,6 +11,7 @@ import { isDiscountExpired } from '../services/voteService';
 import type { Discount } from '../types';
 import DiscountCard from '../components/DiscountCard';
 import NativeAdCard from '../components/NativeAdCard';
+import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
@@ -127,7 +128,8 @@ export default function FavoritesScreen() {
     let adCount = 0;
     for (let i = 0; i < favoriteDiscounts.length; i++) {
       slots.push({ kind: 'discount', item: favoriteDiscounts[i] });
-      if ((i + 1) % 7 === 0) {
+      // Favoriler native reklamı — AdMob onayına kadar KAPALI
+      if (EXTRA_AD_PLACEMENTS && (i + 1) % 7 === 0) {
         adCount++;
         slots.push({ kind: 'ad', adKey: `fav-ad-${adCount}` });
       }

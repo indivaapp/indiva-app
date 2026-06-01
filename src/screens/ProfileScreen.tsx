@@ -13,6 +13,7 @@ import {
 import { loadVotesCache } from '../services/voteService';
 import { getStreak } from '../services/streakService';
 import NativeAdCard from '../components/NativeAdCard';
+import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
 import RewardedRewardButton from '../components/RewardedRewardButton';
 import type { RootStackParamList } from '../navigation';
 
@@ -355,8 +356,8 @@ export default function ProfileScreen() {
             })}
           </View>
 
-          {/* Native reklam — Rütbe Yolu ile Tema arasında */}
-          <NativeAdCard style={{ alignSelf: 'stretch' }} />
+          {/* Native reklam — Rütbe Yolu ile Tema arasında. AdMob onayına kadar KAPALI */}
+          {EXTRA_AD_PLACEMENTS && <NativeAdCard style={{ alignSelf: 'stretch' }} />}
 
           {/* Theme picker */}
           <View style={[styles.card, { backgroundColor: themeCardBg }]}>
