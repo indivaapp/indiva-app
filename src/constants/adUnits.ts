@@ -10,9 +10,11 @@ const USE_TEST_ADS = false;
 const useTest = __DEV__ || USE_TEST_ADS;
 
 // ─── Reklam yüzeyi bayrağı (AdMob onay süreci) ───────────────────────────────
-// false iken SADECE anasayfa akış native reklamı + interstitial + app-open gösterilir.
-// Aktüel, ürün detayı (yatay), benzer fırsatlar, favoriler ve profil native
-// yerleşimleri GEÇİCİ kapatılır. AdMob onayı alındıktan sonra true yapıp geri açarız.
+// false iken TÜM native reklamlar KAPALI (anasayfa, aktüel, ürün detayı, benzer
+// fırsatlar, favoriler, profil) — geriye sadece interstitial + app-open kalır.
+// "Değiştirilmiş reklam davranışı" kısıtlaması native/overlay ile ilgili olduğu
+// için onay alana kadar native yüzeyini tamamen kapatıyoruz.
+// AdMob onayı alındıktan sonra true yapıp native reklamları geri açarız.
 export const EXTRA_AD_PLACEMENTS = false;
 
 export const AD_UNITS = {

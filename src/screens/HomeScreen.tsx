@@ -29,6 +29,7 @@ import {
   saveHomeCache,
 } from '../services/firebaseService';
 import NativeAdCard from '../components/NativeAdCard';
+import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
 import { isDiscountExpired, isHiddenFromFeed, loadVotesCache } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Discount, Story } from '../types';
@@ -501,7 +502,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     let adCount = 0;
     for (let i = 0; i < filteredDiscounts.length; i++) {
       slots.push({ kind: 'discount', item: filteredDiscounts[i] });
-      if ((i + 1) % 6 === 0) {
+      // Anasayfa native reklamı — AdMob onayına kadar KAPALI (tüm native'ler kapalı)
+      if (EXTRA_AD_PLACEMENTS && (i + 1) % 6 === 0) {
         slots.push({ kind: 'ad', adKey: `home-ad-${adCount}` });
         adCount++;
       }
