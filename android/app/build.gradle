@@ -90,8 +90,8 @@ android {
         applicationId "com.indiva.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 22
-        versionName "3.2.4"
+        versionCode 25
+        versionName "3.2.5"
         externalNativeBuild {
             cmake {
                 arguments "-DCMAKE_BUILD_PARALLEL_LEVEL=2"
