@@ -13,6 +13,7 @@ import {
   PanResponder,
   BackHandler,
   Vibration,
+  InteractionManager,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -250,10 +251,17 @@ export default function StoryDetailScreen({ route }: Props) {
       interstitialLoadedRef.current &&
       nextIndex < stories.length
     ) {
-      pendingAfterAdRef.current = nextIndex;
       animRef.current?.stop();   // mevcut story timer'ını durdur (reklam sırasında tetiklenmesin)
       suppressAppOpen();         // dönüşte App Open çıkmasın (reklam üstüne reklam)
-      interstitialRef.current?.show().catch(() => goToRef.current(nextIndex, 'next'));
+      // AdMob "değiştirilmiş reklam davranışı" uyumluluğu: bu tetikleyici,
+      // PanResponder'ın kapladığı aynı View içindeki bir dokunma bölgesinden
+      // (tapRight) çağrılıyor. Reklamı aynı dokunma tikinde göstermek yerine,
+      // InteractionManager ile jest/dokunma tamamen bitip native köprü
+      // sakinleştikten SONRA gösteriyoruz.
+      InteractionManager.runAfterInteractions(() => {
+        pendingAfterAdRef.current = nextIndex;
+        interstitialRef.current?.show().catch(() => goToRef.current(nextIndex, 'next'));
+      });
     } else {
       goToRef.current(nextIndex, 'next');
     }
