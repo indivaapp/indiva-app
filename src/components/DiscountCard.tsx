@@ -198,6 +198,11 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
             <Text style={styles.discountPctText}>%{discountPercentage}</Text>
           </View>
         )}
+        {discountPercentage <= 0 && !isAd && (
+          <View style={styles.newBadge}>
+            <Text style={styles.newBadgeText}>🆕 YENİ</Text>
+          </View>
+        )}
         <OptimizedImage
           src={discount.imageUrl}
           alt={discount.title}
@@ -288,7 +293,7 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
                 </View>
               </View>
             ) : (
-              <View style={[styles.singlePriceBox, { borderColor: isDark ? Colors.gray600 : Colors.gray200 }]}>
+              <View style={[styles.singlePriceBox, { borderColor: Colors.orange }]}>
                 <Text style={[styles.singlePrice, { color: isDark ? Colors.white : Colors.gray800 }]}>
                   {formatPrice(discount.newPrice)}₺
                 </Text>
@@ -384,6 +389,21 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
   discountPctText: {
+    color: Colors.white,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  newBadge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    backgroundColor: Colors.orange,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderBottomRightRadius: 8,
+    zIndex: 20,
+  },
+  newBadgeText: {
     color: Colors.white,
     fontSize: 11,
     fontWeight: '900',
