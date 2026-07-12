@@ -14,7 +14,6 @@ import {
   Modal,
   Animated,
   AppState,
-  Image,
 } from 'react-native';
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -27,6 +26,7 @@ import {
   fetchStoriesCached,
   getHomeCache,
   saveHomeCache,
+  HOME_CACHE_TTL,
 } from '../services/firebaseService';
 import NativeAdCard from '../components/NativeAdCard';
 import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
@@ -238,7 +238,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         setHasMore(false);
         hasLocalData = true;
 
-        const isFresh = Date.now() - homeCache.ts < 3 * 60 * 1000;
+        const isFresh = Date.now() - homeCache.ts < HOME_CACHE_TTL;
         if (isFresh) {
           // Taze cache: Firebase'e gitme, 0 read
           isLoadingRef.current = false;
@@ -437,27 +437,11 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Arka planda ilk 3 kategoriyi prefetch et — ilk açılıştan sonra tıklamalar anında gelir
-  const prefetchDoneRef = useRef(false);
-  useEffect(() => {
-    if (discounts.length === 0 || prefetchDoneRef.current) return;
-    prefetchDoneRef.current = true;
-    const timer = setTimeout(() => {
-      // Sadece 1 kategori prefetch — 36 read yerine 12 (persistent cache varsa 0)
-      if (allCategories[1]) {
-        fetchDiscountsByCategoryCached(allCategories[1], null)
-          .then(res => {
-            // İlk birkaç görseli de önceden indir → kategoriye tıklayınca görseller anında gelir
-            res.discounts.slice(0, 6).forEach(d => {
-              if (d.imageUrl) Image.prefetch(d.imageUrl).catch(() => {});
-            });
-          })
-          .catch(() => {});
-      }
-    }, 2000);
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discounts.length]);
+  // NOT: Burada her açılışta 1 kategoriyi otomatik prefetch eden bir efekt vardı
+  // (kullanıcı dokunmasa bile 12 read + görsel indirme). Firestore read bütçesi
+  // sıkı olduğu için kaldırıldı — kategoriye ilk tıklamada normal (cache'li) yol
+  // zaten hızlı çalışıyor, sadece o kategoriye hiç girmeyen kullanıcılar için
+  // "boşa" harcanan read'ler ortadan kalktı.
 
   // ── Kategori geçişi — opacity sıfıra indirilmez, skeleton zaten geçişi yönetir ─
 

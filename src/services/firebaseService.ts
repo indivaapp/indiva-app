@@ -391,34 +391,19 @@ export async function fetchBrochuresByStore(storeName: string): Promise<Brochure
   }
 }
 
-const VERCEL_PROXY = 'https://indiva-proxy.vercel.app';
-
 /**
- * Story'leri Vercel Edge Cache üzerinden çeker.
- * Binlerce kullanıcı aynı endpoint'i çağırsa da Vercel CDN her 2 dakikada
- * sadece 1 kez Firestore'a gider — diğer tüm istekler cache'ten karşılanır.
- * Fallback: Vercel cevap vermezse doğrudan Firestore SDK'ya döner.
+ * Story'leri Firestore'dan çeker. NOT: Daha önce burada Vercel Edge Cache
+ * üzerinden gitmeyi deneyen bir kod vardı (indiva-proxy.vercel.app/api/stories)
+ * ama bu endpoint hiç deploy edilmemiş — canlıda her zaman 404 dönüyordu,
+ * yani "cache" hiç devrede değildi, her çağrı zaten doğrudan buraya (SDK
+ * fallback'e) düşüyordu. Kaldırıldı; client tarafı zaten fetchStoriesCached
+ * ile 10 dk'lık cache uyguluyor, bu yeterli. limit(30) eklendi — öncesinde
+ * sınırsızdı (tüm aktif story'leri çekiyordu).
  */
 export async function fetchStories(): Promise<Story[]> {
   try {
-    const res = await withTimeout(
-      fetch(`${VERCEL_PROXY}/api/stories`, { headers: { Accept: 'application/json' } }),
-      10000,
-      'Hikayeler',
-    );
-    if (res.ok) {
-      const json = (await res.json()) as { success?: boolean; stories?: Story[] };
-      if (json.success && Array.isArray(json.stories)) {
-        return json.stories as Story[];
-      }
-    }
-  } catch {
-    // Vercel ulaşılamaz → Firestore SDK'ya düş
-  }
-  // ─── Firestore SDK fallback ───────────────────────────────────────────────
-  try {
     const col = collection(db, 'influencerStories');
-    const q = query(col, where('isActive', '==', true), orderBy('createdAt', 'desc'));
+    const q = query(col, where('isActive', '==', true), orderBy('createdAt', 'desc'), limit(30));
     const snap = await withTimeout(getDocs(q), 10000, 'Hikayeler');
     const now = Date.now();
     const MS_24H = 24 * 60 * 60 * 1000;
