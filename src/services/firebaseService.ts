@@ -11,6 +11,7 @@ import {
   doc,
   addDoc,
   serverTimestamp,
+  Timestamp,
 } from '@react-native-firebase/firestore';
 import type { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,6 +19,7 @@ import { tsToMs } from '../utils/time';
 import type { Discount, Brochure, PendingDiscount, AdRequest, Story } from '../types';
 
 const ITEMS_PER_PAGE = 12;
+const VERCEL_PROXY = 'https://indiva-proxy.vercel.app';
 const OFFLINE_CACHE_KEY = 'indiva_offline_discounts';
 const OFFLINE_CACHE_MAX = 24;
 
@@ -242,12 +244,41 @@ const filterDiscounts = (discounts: Discount[]): Discount[] =>
   });
 
 // ─── Queries ───────────────────────────────────────────────────────────────────
-export async function fetchDiscounts(
-  lastVisible: FirebaseFirestoreTypes.QueryDocumentSnapshot | null
-) {
+// Sayfalama imleci artık ham bir QueryDocumentSnapshot değil, son ilanın
+// createdAt milisaniye değeri — JSON üzerinden taşınabilir bir sayı. Bu,
+// ilk sayfanın Vercel edge-cache'inden (bkz. aşağı) veya doğrudan Firestore
+// SDK'dan gelmesi farketmeksizin aynı şekilde devam edebilmesini sağlar.
+export async function fetchDiscounts(lastVisible: number | null) {
+  // İlk sayfa (sayfalama yok) → önce edge-cache dene. Binlerce kullanıcı aynı
+  // anda istese de Vercel'in CDN'i bunu Firestore'a TEK okuma olarak yansıtır
+  // (bkz. discounts.ts). Ulaşılamazsa sessizce Firestore SDK'ya düşülür.
+  if (!lastVisible) {
+    try {
+      const res = await withTimeout(
+        fetch(`${VERCEL_PROXY}/api/discounts`, { headers: { Accept: 'application/json' } }),
+        8000,
+        'İlanlar (edge)',
+      );
+      if (res.ok) {
+        const json = (await res.json()) as { success?: boolean; discounts?: any[] };
+        if (json.success && Array.isArray(json.discounts) && json.discounts.length > 0) {
+          const rawDiscounts = json.discounts as Discount[];
+          const discounts = filterDiscounts(rawDiscounts);
+          const last = rawDiscounts[rawDiscounts.length - 1];
+          const newLastVisible = tsToMs(last?.createdAt);
+          const hasMore = rawDiscounts.length === ITEMS_PER_PAGE;
+          if (discounts.length > 0) saveToOfflineCache(discounts);
+          return { discounts, lastVisible: newLastVisible, hasMore };
+        }
+      }
+    } catch {
+      // Edge cache ulaşılamadı → aşağıdaki Firestore SDK yoluna düş
+    }
+  }
+
   const col = collection(db, 'discounts');
   const q = lastVisible
-    ? query(col, orderBy('createdAt', 'desc'), startAfter(lastVisible), limit(ITEMS_PER_PAGE))
+    ? query(col, orderBy('createdAt', 'desc'), startAfter(Timestamp.fromMillis(lastVisible)), limit(ITEMS_PER_PAGE))
     : query(col, orderBy('createdAt', 'desc'), limit(ITEMS_PER_PAGE));
 
   const documentSnapshots = await withTimeout(getDocs(q), 12000, 'İlanlar');
@@ -255,7 +286,8 @@ export async function fetchDiscounts(
     d => ({ id: d.id, ...d.data() } as Discount)
   );
   const discounts = filterDiscounts(rawDiscounts);
-  const newLastVisible = documentSnapshots.docs[documentSnapshots.docs.length - 1] ?? null;
+  const lastDoc = documentSnapshots.docs[documentSnapshots.docs.length - 1];
+  const newLastVisible = lastDoc ? tsToMs((lastDoc.data() as any).createdAt) : null;
   const hasMore = documentSnapshots.docs.length === ITEMS_PER_PAGE;
 
   if (!lastVisible && discounts.length > 0) {
