@@ -13,18 +13,14 @@ import {
   PanResponder,
   BackHandler,
   Vibration,
-  InteractionManager,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { InterstitialAd, AdEventType } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { tsToMs } from '../utils/time';
-import { AD_UNITS } from '../constants/adUnits';
-import { useAdsReady, useNonPersonalized } from '../../App';
 import type { RootStackParamList } from '../navigation';
 import type { Story } from '../types';
 
@@ -36,8 +32,6 @@ const SWIPE_THRESHOLD = 60;
 const DISMISS_THRESHOLD = 100;
 const UP_SWIPE_THRESHOLD = 80;
 const LONG_PRESS_DELAY = 150;
-// Her kaç doğal (timer tamamlanan) geçişte bir sponsorlu story gösterilsin
-const SPONSORED_EVERY_N = 5;
 
 
 function timeAgo(timestamp: any): string {
@@ -168,49 +162,12 @@ export default function StoryDetailScreen({ route }: Props) {
   const goToRef = useRef<(n: number, d: 'next' | 'prev') => void>(() => {});
   const resumeRef = useRef<() => void>(() => {});
 
-  // ── Story Interstitial (Google tam ekran reklamı) ───────────────
-  const adsReady        = useAdsReady();
-  const nonPersonalized = useNonPersonalized();
-  const advanceCountRef = useRef(0);              // tüm İLERİ geçişlerde artar (otomatik + dokunma)
-  const interstitialRef = useRef<InterstitialAd | null>(null);
-  const interstitialLoadedRef = useRef(false);
-  const pendingAfterAdRef = useRef<number | null>(null); // interstitial kapanınca gidilecek index
+  // NOT: Story interstitial reklami tamamen kaldirildi (bkz. git gecmisi).
+  // AdMob "Degistirilmis reklam davranisi" ihlalini tekrar tekrar reddetti;
+  // bu format (tam ekran + PanResponder'in kapladigi ayni dokunma bolgesinden
+  // tetiklenmesi) en riskli yuzeydi. Once native+rewarded ile onay alip,
+  // ayri bir surumde tek basina geri eklemek daha guvenli.
   const advanceForwardRef = useRef<(fromIndex: number) => void>(() => {});
-  const jumpToStoryRef = useRef<(index: number) => void>(() => {});
-
-  // Story interstitial — yükle; kapanınca sonraki story'e geç + yeniden yükle
-  useEffect(() => {
-    if (!adsReady) return;
-    const ad = InterstitialAd.createForAdRequest(AD_UNITS.interstitialStory, {
-      requestNonPersonalizedAdsOnly: nonPersonalized,
-    });
-    interstitialRef.current = ad;
-    interstitialLoadedRef.current = false;
-
-    const unsubLoaded = ad.addAdEventListener(AdEventType.LOADED, () => {
-      interstitialLoadedRef.current = true;
-    });
-    const unsubClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
-      interstitialLoadedRef.current = false;
-      const nextIdx = pendingAfterAdRef.current;
-      pendingAfterAdRef.current = null;
-      ad.load(); // bir sonraki gösterim için yeniden yükle
-      // Reklam sonrası DİREKT geçiş — slide animasyonu kullanma. App foreground'a
-      // dönerken native animasyon completion callback'i tetiklenmeyip story'yi
-      // dondurabiliyor; jumpToStory animasyonsuz, güvenli geçiş yapar.
-      if (nextIdx !== null) jumpToStoryRef.current(nextIdx);
-    });
-    const unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
-      interstitialLoadedRef.current = false;
-    });
-
-    ad.load();
-    return () => {
-      unsubLoaded(); unsubClosed(); unsubError();
-      interstitialRef.current = null;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adsReady, nonPersonalized]);
 
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
   // Reset copy feedback + backdrop state when navigating to a different story
@@ -238,32 +195,11 @@ export default function StoryDetailScreen({ route }: Props) {
   const imageReadyRef = useRef(false);
   const pendingStartRef = useRef(false);
 
-  // ── İleri geçiş + sponsorlu reklam tetikleyici ──────────────────
+  // ── İleri geçiş ──────────────────────────────────────────────────
   // Hem otomatik (timer) hem manuel (dokunma) ileri geçişler buradan geçer.
-  // Her SPONSORED_EVERY_N geçişte bir, reklam yüklüyse ve sıradaki story varsa
-  // sponsorlu reklam gösterilir; değilse normal ilerlenir.
   const advanceForward = useCallback((fromIndex: number) => {
-    const nextIndex = fromIndex + 1;
-    advanceCountRef.current += 1;
-    if (
-      advanceCountRef.current % SPONSORED_EVERY_N === 0 &&
-      interstitialLoadedRef.current &&
-      nextIndex < stories.length
-    ) {
-      animRef.current?.stop();   // mevcut story timer'ını durdur (reklam sırasında tetiklenmesin)
-      // AdMob "değiştirilmiş reklam davranışı" uyumluluğu: bu tetikleyici,
-      // PanResponder'ın kapladığı aynı View içindeki bir dokunma bölgesinden
-      // (tapRight) çağrılıyor. Reklamı aynı dokunma tikinde göstermek yerine,
-      // InteractionManager ile jest/dokunma tamamen bitip native köprü
-      // sakinleştikten SONRA gösteriyoruz.
-      InteractionManager.runAfterInteractions(() => {
-        pendingAfterAdRef.current = nextIndex;
-        interstitialRef.current?.show().catch(() => goToRef.current(nextIndex, 'next'));
-      });
-    } else {
-      goToRef.current(nextIndex, 'next');
-    }
-  }, [stories.length]);
+    goToRef.current(fromIndex + 1, 'next');
+  }, []);
   advanceForwardRef.current = advanceForward;
 
   // ── Progress control ────────────────────────────────────────────
@@ -384,33 +320,6 @@ export default function StoryDetailScreen({ route }: Props) {
       setCurrentIndex(nextIndex);
     });
   }, [incomingSlideX, slideScale, slideX, slideY, stories.length]);
-
-  // Animasyonsuz, güvenli geçiş — interstitial reklam sonrası kullanılır.
-  // Slide animasyonuna (ve onun completion callback'ine) bağımlı değildir → donma olmaz.
-  const jumpToStory = useCallback((index: number) => {
-    if (index < 0 || index >= stories.length) {
-      animateDismissRef.current();
-      return;
-    }
-    animRef.current?.stop();
-    if (timerRef.current) clearTimeout(timerRef.current);
-    isTransitioningRef.current = false;
-    transitionStoryIndexRef.current = null;
-    setTransitionStoryIndex(null);
-    isPausedRef.current = false;
-    isSwipingRef.current = false;
-    slideX.setValue(0);
-    slideY.setValue(0);
-    slideScale.setValue(1);
-    incomingSlideX.setValue(SCREEN_W);
-    bgOpacity.setValue(1);
-    // Yeni görsel yüklenince onLoad progress'i başlatır (isTransitioning=false olduğu için)
-    imageReadyRef.current = false;
-    pendingStartRef.current = false;
-    postTransitionRef.current = false;
-    setCurrentIndex(index);
-  }, [incomingSlideX, slideScale, slideX, slideY, bgOpacity, stories.length]);
-  jumpToStoryRef.current = jumpToStory;
 
   // Keep callback refs up-to-date every render
   useEffect(() => { goToRef.current = goTo; }, [goTo]);
