@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
-import { StatusBar, StyleSheet, NativeModules, Platform, Animated, Alert, AppState } from 'react-native';
+import { StatusBar, StyleSheet, NativeModules, Platform, Animated, Alert } from 'react-native';
 
 // Global JS hata yakalayıcı — uygulamanın sessizce kapanmasını önler
 const prevHandler = ErrorUtils.getGlobalHandler();
@@ -21,8 +21,7 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { Colors } from './src/constants/colors';
 import RootNavigator from './src/navigation';
 import SplashScreen from './src/components/SplashScreen';
-import MobileAds, { AdsConsent, AdsConsentStatus, AppOpenAd, AdEventType } from 'react-native-google-mobile-ads';
-import { AD_UNITS } from './src/constants/adUnits';
+import MobileAds, { AdsConsent, AdsConsentStatus } from 'react-native-google-mobile-ads';
 import {
   loadVotesCache,
 } from './src/services/voteService';
@@ -37,17 +36,10 @@ import {
   onMessageListener,
   handlePendingNotification,
 } from './src/services/pushNotificationService';
-import { isAppOpenSuppressed } from './src/services/appOpenControl';
 import { updateStreakOnOpen } from './src/services/streakService';
 import { navigationRef } from './src/navigation/navigationRef';
 
 const { NavigationBar } = NativeModules;
-
-// ─── App Open Ad ──────────────────────────────────────────────────────────────
-// Uygulama arka plandan öne gelince gösterilir (soğuk açılış değil — UX dostu).
-const APP_OPEN_AD_UNIT_ID = AD_UNITS.appOpen;
-// Aynı kullanıcıya en erken kaç ms sonra tekrar gösterilsin (8 dakika)
-const APP_OPEN_MIN_INTERVAL_MS = 8 * 60 * 1000;
 
 // ─── Ads Context ─────────────────────────────────────────────────────────────
 // ready          : MobileAds.initialize() tamamlandı, reklam isteği atılabilir.
@@ -85,74 +77,12 @@ function AppContent() {
   const [notificationCount, setNotificationCount] = useState(0);
   const [adsContext, setAdsContext] = useState<{ ready: boolean; nonPersonalized: boolean }>({ ready: false, nonPersonalized: true });
 
-  // ── App Open Ad refs ─────────────────────────────────────────────────────────
-  const appOpenAdRef      = useRef<AppOpenAd | null>(null);
-  // Date.now() ile başlat: ilk oturumda 8 dakikalık cooldown hemen başlar.
-  // 0 ile başlarsa (epoch) koşul her zaman geçer → splash kapanır kapanmaz
-  // kullanıcı arka plana alıp geri gelince reklam anında gösterilir.
-  const lastAppOpenRef    = useRef<number>(Date.now());
-  const splashVisibleRef  = useRef(true);             // AppState callback'inde kullanılır
-
-  // splashVisible değişince ref'i güncelle (AppState callback kapalı değer görmesin)
-  useEffect(() => { splashVisibleRef.current = splashVisible; }, [splashVisible]);
-
-  // ── App Open Ad: SDK hazır olunca oluştur ve yükle ───────────────────────────
-  useEffect(() => {
-    if (!adsContext.ready) return;
-
-    const ad = AppOpenAd.createForAdRequest(APP_OPEN_AD_UNIT_ID, {
-      requestNonPersonalizedAdsOnly: adsContext.nonPersonalized,
-    });
-    appOpenAdRef.current = ad;
-
-    // Reklam ekranda gösterilince zamanı kaydet.
-    // CLOSED yerine OPENED'da güncelleme: kullanıcı reklamı tıklayıp advertiser
-    // sitesine giderse CLOSED hiç tetiklenmeyebilir; OPENED her zaman tetiklenir.
-    const unsubOpened = ad.addAdEventListener(AdEventType.OPENED, () => {
-      lastAppOpenRef.current = Date.now();
-    });
-
-    // Reklam kapanınca: bir sonraki gösterim için yeniden yükle
-    const unsubClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
-      ad.load();
-    });
-
-    // Hata olursa 30 saniye sonra tekrar dene (ağ kesilmesi vb. için)
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    const unsubError = ad.addAdEventListener(AdEventType.ERROR, () => {
-      retryTimer = setTimeout(() => { try { ad.load(); } catch {} }, 30000);
-    });
-
-    ad.load();
-
-    return () => {
-      unsubOpened();
-      unsubClosed();
-      unsubError();
-      if (retryTimer) clearTimeout(retryTimer);
-      appOpenAdRef.current = null;
-    };
-  // nonPersonalized değişirse yeni istek oluştur
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adsContext.ready, adsContext.nonPersonalized]);
-
-  // ── App Open Ad: arka plandan öne gelince göster (soğuk açılış değil) ────────
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', state => {
-      if (state !== 'active') return;
-      if (splashVisibleRef.current) return;          // splash açıkken gösterme
-      if (isAppOpenSuppressed()) return;             // reklam/link tıklamasından yeni döndü → "reklam üstüne reklam" olmasın
-
-      const ad = appOpenAdRef.current;
-      if (!ad?.loaded) return;                       // henüz yüklenmedi
-
-      const now = Date.now();
-      if (now - lastAppOpenRef.current < APP_OPEN_MIN_INTERVAL_MS) return; // çok yakın
-
-      ad.show().catch(() => {}); // hata olursa sessizce geç
-    });
-    return () => sub.remove();
-  }, []);
+  // NOT: App Open reklamı tamamen kaldırıldı (bkz. git geçmişi — AppOpenAd,
+  // lastAppOpenRef, splashVisibleRef, ilgili iki useEffect). AdMob'un tekrar
+  // eden "Değiştirilmiş reklam davranışı" reddi için şüpheli yüzeyleri elemek
+  // amacıyla, düşük reklam hacmi (haftada ~133 istek) göz önüne alınarak
+  // kaldırıldı — literatürde bu format şeffaflık/sıralama sorunlarıyla en sık
+  // ilişkilendirilen tür. Tekrar eklemek gerekirse commit geçmişinden bakılabilir.
 
   // Sync Android system navigation bar color with app theme
   useEffect(() => {

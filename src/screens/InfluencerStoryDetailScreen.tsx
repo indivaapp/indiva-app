@@ -23,7 +23,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InterstitialAd, AdEventType } from 'react-native-google-mobile-ads';
 import { Colors } from '../constants/colors';
 import { tsToMs } from '../utils/time';
-import { suppressAppOpen } from '../services/appOpenControl';
 import { AD_UNITS } from '../constants/adUnits';
 import { useAdsReady, useNonPersonalized } from '../../App';
 import type { RootStackParamList } from '../navigation';
@@ -252,7 +251,6 @@ export default function StoryDetailScreen({ route }: Props) {
       nextIndex < stories.length
     ) {
       animRef.current?.stop();   // mevcut story timer'ını durdur (reklam sırasında tetiklenmesin)
-      suppressAppOpen();         // dönüşte App Open çıkmasın (reklam üstüne reklam)
       // AdMob "değiştirilmiş reklam davranışı" uyumluluğu: bu tetikleyici,
       // PanResponder'ın kapladığı aynı View içindeki bir dokunma bölgesinden
       // (tapRight) çağrılıyor. Reklamı aynı dokunma tikinde göstermek yerine,
@@ -752,7 +750,6 @@ export default function StoryDetailScreen({ route }: Props) {
     const link = storyLinkRef.current;
     if (!link) return;
     try {
-      suppressAppOpen();
       await Linking.openURL(link);
     } catch {
       Alert.alert('Hata', 'Bağlantı açılırken bir sorun oluştu.');

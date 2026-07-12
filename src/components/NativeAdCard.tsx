@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Image, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import {
   NativeAd,
-  NativeAdEventType,
   NativeAdView,
   NativeAsset,
   NativeAssetType,
@@ -13,7 +12,6 @@ import { useTheme } from '../context/ThemeContext';
 import { useAdsReady, useNonPersonalized } from '../../App';
 import { getCachedNativeAd } from '../services/nativeAdPool';
 import { AD_UNITS } from '../constants/adUnits';
-import { suppressAppOpen } from '../services/appOpenControl';
 
 // ─── Fallback promolar (reklam yüklenemediğinde gösterilir) ───────────────────
 const FALLBACK_PROMOS = [
@@ -99,19 +97,6 @@ function NativeAdCardInner({
       }
     };
   }, [adsReady, cacheKey]);
-
-  // Reklama tıklanıp reklamverenin sayfasından/mağazasından geri dönüldüğünde
-  // App Open reklamının hemen üstüne binmesini önle ("reklam üstüne reklam").
-  // Diğer tüm dış bağlantı açılışlarında suppressAppOpen() çağrılıyordu, ama
-  // native reklam tıklamaları SDK tarafından native olarak yönetildiği için
-  // JS tarafında hiç yakalanmıyordu — bu boşluk kapatıldı.
-  useEffect(() => {
-    if (!nativeAd) return;
-    const sub = nativeAd.addAdEventListener(NativeAdEventType.CLICKED, () => {
-      suppressAppOpen();
-    });
-    return () => sub.remove();
-  }, [nativeAd]);
 
   // İNDİVA tanıtım kartı — reklam yüklenemediğinde veya reklamsız modda gösterilir
   const promo = FALLBACK_PROMOS[PROMO_IDX];

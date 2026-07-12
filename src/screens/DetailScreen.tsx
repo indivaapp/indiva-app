@@ -27,7 +27,6 @@ import NativeAdCard from '../components/NativeAdCard';
 import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { incrementVisitCount } from '../services/contributionService';
-import { suppressAppOpen } from '../services/appOpenControl';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { getDiscountById, fetchDiscountsByCategory, fetchDiscountsByCategoryCached, fetchDiscountVotes, invalidateDiscountVotes } from '../services/firebaseService';
 import {
@@ -552,7 +551,6 @@ export default function DetailScreen({ route }: Props) {
     const waUrl = `whatsapp://send?text=${encodeURIComponent(text)}`;
     const canOpen = await Linking.canOpenURL(waUrl).catch(() => false);
     if (canOpen) {
-      suppressAppOpen();
       await Linking.openURL(waUrl).catch(() => {});
     } else {
       try { await Share.share({ message: text, title: d.title }); } catch {}
@@ -574,10 +572,10 @@ export default function DetailScreen({ route }: Props) {
   const handleGoToDiscount = async () => {
     try {
       if (isAd) {
-        if (d.link) { suppressAppOpen(); await Linking.openURL(d.link); }
+        if (d.link) { await Linking.openURL(d.link); }
         return;
       }
-      if (!isExpired && d.link) { suppressAppOpen(); await Linking.openURL(d.link); }
+      if (!isExpired && d.link) { await Linking.openURL(d.link); }
     } catch {
       Alert.alert('Hata', 'Bağlantı açılamadı. Tarayıcınızı kontrol edin.');
     }
