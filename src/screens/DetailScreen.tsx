@@ -341,6 +341,20 @@ export default function DetailScreen({ route }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDiscountIdForView, localDiscount?.activeVotes, localDiscount?.expiredVotes, discount?.activeVotes, discount?.expiredVotes]);
 
+  // Bir sonraki/önceki üründe kaydırma sırasında görsel yüklenmesini beklememek
+  // için (kullanıcı şikayeti: "kasarak geçiyor... önceki görüntü flaş ile
+  // gösteriyor") komşu ürünlerin görselini önceden RN'in native cache'ine
+  // indiriyoruz. Kaydırma jesti başladığında (hatta çoğu zaman kullanıcı daha
+  // dokunmadan, ürün değişir değişmez) görsel zaten hazır oluyor.
+  useEffect(() => {
+    const list = routeList;
+    if (!list || localIndex < 0) return;
+    const next = list[localIndex + 1];
+    const prev = list[localIndex - 1];
+    if (next?.imageUrl) Image.prefetch(next.imageUrl).catch(() => {});
+    if (prev?.imageUrl) Image.prefetch(prev.imageUrl).catch(() => {});
+  }, [routeList, localIndex]);
+
   // postTransitionRef useEffect: positions reset AFTER React commits new localIndex —
   // prevents the 1-frame flash of old content when slideX.setValue(0) fires before render.
   useEffect(() => {

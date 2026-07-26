@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Image,
@@ -28,6 +28,20 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+
+  // KÖK NEDEN (kayma/flaş şikayeti): bu bileşen ürün/aktüel sayfaları arasındaki
+  // kaydırma geçişlerinde (DetailScreen, AktuelDetailScreen) AYNI instance olarak
+  // kalıyor — sadece `src` prop'u değişiyor, bileşen yeniden mount olmuyor. Bu
+  // yüzden isLoaded/hasError state'i ESKİ görselden "true" olarak kalıyordu:
+  // yeni görsel henüz yüklenmemiş olsa bile üstü opaklık=1 ile gösterilmeye
+  // çalışılıyor, ESKİ bitmap ekranda kalıp yeni görsel hazır olunca aniden
+  // üzerine "flaş" ile atlıyordu (yumuşak geçiş yerine). `src` değiştiğinde
+  // state'i sıfırlamak, placeholder'ın doğru şekilde tekrar devreye girmesini
+  // ve eski görselin donuk kalmamasını sağlıyor.
+  useEffect(() => {
+    setIsLoaded(false);
+    setHasError(false);
+  }, [src]);
 
   return (
     <View style={[styles.container, containerStyle]}>
