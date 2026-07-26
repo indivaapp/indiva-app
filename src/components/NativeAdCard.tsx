@@ -165,15 +165,47 @@ function NativeAdCardInner({
     </View>
   );
 
+  // Yükleniyor durumunda horizontal/full-width modlar önceden "return null"
+  // ile kısa süre boş bırakılıyordu — reklam gelince ANİDEN yer kaplayıp
+  // altındaki içeriği aşağı itiyordu (düzen kayması / "pop-in"). Compact modda
+  // zaten bir iskelet vardı, aynı yaklaşımı buraya da taşıyoruz — promo
+  // kartlarıyla aynı boyuttaki konteynerlerde gri iskelet çizgileri.
+  const skBg = isDark ? Colors.gray700 : Colors.gray200;
+  const skContent = isDark ? Colors.gray800 : Colors.white;
+  const horizontalSkeleton = (
+    <View style={[styles.hWrapper, style]}>
+      <View style={[styles.hCard, { backgroundColor: skContent, borderColor: isDark ? '#2d3748' : '#e5e7eb' }]}>
+        <View style={[styles.hIcon, { backgroundColor: skBg }]} />
+        <View style={styles.hTextCol}>
+          <View style={[styles.skLine, { width: '55%', backgroundColor: skBg, marginBottom: 6 }]} />
+          <View style={[styles.skLine, { width: '80%', backgroundColor: skBg }]} />
+        </View>
+      </View>
+    </View>
+  );
+  const fullWidthSkeleton = (
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: skContent, borderColor: isDark ? '#2d3748' : '#e5e7eb' },
+        style,
+      ]}
+    >
+      <View style={styles.headlineRow}>
+        <View style={{ width: 24, height: 24, borderRadius: 6, backgroundColor: skBg }} />
+        <View style={[styles.skLine, { width: '60%', backgroundColor: skBg }]} />
+      </View>
+      <View style={[styles.skLine, { width: '90%', backgroundColor: skBg, marginTop: 8 }]} />
+    </View>
+  );
+
   // ── Compact (grid) modu — yükleniyor / fallback ──────────────────────────
   if (compact && !nativeAd) {
     if (failed) {
       // Reklam yüklenemedi — uygulama promo kartı göster (boş alan bırakma)
       return compactPromoCard;
     }
-    // Yükleniyor — DiscountCard ile aynı boyutta hafif iskelet
-    const skBg = isDark ? Colors.gray700 : Colors.gray200;
-    const skContent = isDark ? Colors.gray800 : Colors.white;
+    // Yükleniyor — DiscountCard ile aynı boyutta hafif iskelet (skBg/skContent yukarıda tanımlı)
     return (
       <View style={[styles.compactSkeleton, { backgroundColor: skContent }, style]}>
         <View style={[styles.compactSkeletonImg, { backgroundColor: skBg }]} />
@@ -189,7 +221,8 @@ function NativeAdCardInner({
 
   // Buraya gelindiğinde compact modu yukarıda ele alındı → horizontal veya full-width.
   if (!nativeAd) {
-    if (!failed) return null;                       // yükleniyor — kısa süre boş (pop-in)
+    // Yükleniyor — düzen kaymasın diye iskelet (aynı boyutta), reklam gelince yerini alır.
+    if (!failed) return horizontal ? horizontalSkeleton : fullWidthSkeleton;
     return horizontal ? horizontalPromo : fullWidthPromo; // başarısız → İNDİVA tanıtımı
   }
 

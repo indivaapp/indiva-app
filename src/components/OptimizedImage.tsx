@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
-  Image,
+  Animated,
   StyleSheet,
   ImageStyle,
   ViewStyle,
@@ -28,6 +28,10 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+  // Yumuşak fade-in için — eskiden opaklık isLoaded ile ANLIK 0→1 atlıyordu,
+  // özellikle liste kaydırırken görsel "aniden beliriyor" hissi veriyordu
+  // (kullanıcı geri bildirimi: profesyonel bir cila için yumuşak geçiş istendi).
+  const opacity = useRef(new Animated.Value(0)).current;
 
   // KÖK NEDEN (kayma/flaş şikayeti): bu bileşen ürün/aktüel sayfaları arasındaki
   // kaydırma geçişlerinde (DetailScreen, AktuelDetailScreen) AYNI instance olarak
@@ -41,7 +45,13 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
   useEffect(() => {
     setIsLoaded(false);
     setHasError(false);
-  }, [src]);
+    opacity.setValue(0);
+  }, [src, opacity]);
+
+  const handleLoad = () => {
+    setIsLoaded(true);
+    Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+  };
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -65,12 +75,12 @@ const OptimizedImage: React.FC<OptimizedImageProps> = ({
           <Text style={styles.errorText}>Yüklenemedi</Text>
         </View>
       ) : src ? (
-        <Image
+        <Animated.Image
           source={{ uri: src }}
-          style={[StyleSheet.absoluteFill, { opacity: isLoaded ? 1 : 0 }, style]}
+          style={[StyleSheet.absoluteFill, { opacity }, style]}
           resizeMode={resizeMode}
           fadeDuration={0}
-          onLoad={() => setIsLoaded(true)}
+          onLoad={handleLoad}
           onError={() => { setIsLoaded(true); setHasError(true); }}
           accessibilityLabel={alt}
         />

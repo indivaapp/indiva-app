@@ -12,7 +12,6 @@ import {
   Easing,
   PanResponder,
   BackHandler,
-  Vibration,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -21,6 +20,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../constants/colors';
 import { tsToMs } from '../utils/time';
+import { haptic } from '../utils/haptics';
 import type { RootStackParamList } from '../navigation';
 import type { Story } from '../types';
 
@@ -47,13 +47,6 @@ function timeAgo(timestamp: any): string {
     return '';
   }
 }
-
-// Lightweight haptic — uses Vibration as a fallback since
-// react-native-haptic-feedback isn't installed. Short pulses feel like
-// a tap on Android; on iOS this routes through the taptic engine.
-const haptic = (ms: number = 10) => {
-  try { Vibration.vibrate(ms); } catch {}
-};
 
 export default function StoryDetailScreen({ route }: Props) {
   const { stories, initialIndex } = route.params;

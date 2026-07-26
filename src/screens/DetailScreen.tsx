@@ -37,6 +37,7 @@ import OptimizedImage from '../components/OptimizedImage';
 import DiscountCard from '../components/DiscountCard';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
+import { haptic } from '../utils/haptics';
 import type { RootStackParamList } from '../navigation';
 import type { Discount } from '../types';
 
@@ -560,6 +561,7 @@ export default function DetailScreen({ route }: Props) {
   const userVoteType = getUserVoteType(d.id);
 
   const handleShare = async () => {
+    haptic();
     const shareUrl = d.link || `https://indiva.app/detay/${d.id}`;
     const text = `🔥 İNDİVA'da ${discountPercentage > 0 ? `%${discountPercentage} indirimli ` : ''}fırsat!\n${d.title}\n${shareUrl}`;
     const waUrl = `whatsapp://send?text=${encodeURIComponent(text)}`;
@@ -572,6 +574,7 @@ export default function DetailScreen({ route }: Props) {
   };
 
   const handleToggleFavorite = async () => {
+    haptic();
     Animated.sequence([
       Animated.spring(heartScale, { toValue: 1.45, friction: 3, tension: 200, useNativeDriver: true }),
       Animated.spring(heartScale, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }),
@@ -597,6 +600,7 @@ export default function DetailScreen({ route }: Props) {
 
   const handleVote = async (voteType: 'active' | 'expired') => {
     if (userVoted || voteCalculating) return;
+    haptic();
 
     // Oyu hemen kaydet + "hesaplanıyor" fazına gir (oranlar bu fazda gizlenir → flicker yok)
     setMyVoteType(voteType);
@@ -641,6 +645,7 @@ export default function DetailScreen({ route }: Props) {
 
   const handleCopyCode = () => {
     if (!d.discountCode) return;
+    haptic();
     Clipboard.setString(d.discountCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

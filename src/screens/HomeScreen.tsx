@@ -37,6 +37,7 @@ import DiscountCard from '../components/DiscountCard';
 import StoriesBar from '../components/InfluencerStoriesBar';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
+import { haptic } from '../utils/haptics';
 import { CATEGORIES, normalizeCategory } from '../constants/categories';
 // FirebaseFirestoreTypes import kaldırıldı — type çakışması nedeniyle any kullanılıyor
 import type { RootStackParamList } from '../navigation';
@@ -395,6 +396,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   }, [selectedCategory]);
 
   const handleToggleFavorite = useCallback(async (discountId: string) => {
+    haptic();
     const next = await toggleFavoriteId(discountId);
     setFavorites(next);
   }, []);

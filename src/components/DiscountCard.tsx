@@ -14,6 +14,7 @@ import type { Discount } from '../types';
 import OptimizedImage from './OptimizedImage';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
+import { haptic } from '../utils/haptics';
 import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -121,6 +122,7 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
   };
 
   const handleShare = async () => {
+    haptic();
     const shareText = `🔥 İNDİVA'da ${discountPercentage > 0 ? `%${discountPercentage} indirimli ` : ''}fırsat!\n${discount.title}`;
     const shareUrl = discount.link || `https://indiva.app/detay/${discount.id}`;
     try {
