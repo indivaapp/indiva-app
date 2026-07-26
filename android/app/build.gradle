@@ -98,6 +98,11 @@ android {
             }
         }
     }
+    // local.properties git'e girmediği için CI ortamında (ör. secrets eklenmemiş
+    // GitHub Actions) keystoreProps boş kalır — release signingConfig'i yine de
+    // tanımlamaya çalışmak Gradle configuration aşamasında "Cannot convert 'null'
+    // to File" hatasıyla TÜM build tiplerini (debug dahil) düşürüyordu.
+    def hasReleaseKeystore = keystoreProps['KEYSTORE_PATH'] != null
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -105,11 +110,13 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
-        release {
-            storeFile file(keystoreProps['KEYSTORE_PATH'])
-            storePassword keystoreProps['KEYSTORE_PASSWORD']
-            keyAlias keystoreProps['KEY_ALIAS']
-            keyPassword keystoreProps['KEY_PASSWORD']
+        if (hasReleaseKeystore) {
+            release {
+                storeFile file(keystoreProps['KEYSTORE_PATH'])
+                storePassword keystoreProps['KEYSTORE_PASSWORD']
+                keyAlias keystoreProps['KEY_ALIAS']
+                keyPassword keystoreProps['KEY_PASSWORD']
+            }
         }
     }
     buildTypes {
@@ -117,7 +124,10 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            signingConfig signingConfigs.release
+            // Gerçek release keystore yoksa (ör. CI'da test amaçlı build) debug
+            // anahtarına düşülür — böyle bir APK Play Store'daki sürümü
+            // GÜNCELLEYEMEZ, sadece ayrı kurulum/test için kullanılabilir.
+            signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
