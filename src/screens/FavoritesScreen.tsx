@@ -11,8 +11,6 @@ import { getDiscountById } from '../services/firebaseService';
 import { isDiscountExpired } from '../services/voteService';
 import type { Discount } from '../types';
 import DiscountCard from '../components/DiscountCard';
-import NativeAdCard from '../components/NativeAdCard';
-import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
@@ -24,7 +22,7 @@ const FAV_OBJ_CACHE_KEY = 'indiva_fav_objs_v2';
 const FAV_FETCH_TTL     = 20 * 60 * 1000; // 20 dakika
 interface FavObjCache { ids: string[]; discounts: Discount[]; ts: number }
 
-type FavSlot = { kind: 'discount'; item: Discount } | { kind: 'ad'; adKey: string };
+type FavSlot = { kind: 'discount'; item: Discount };
 type FavRow = { rowKey: string; left: FavSlot; right: FavSlot | null };
 
 export default function FavoritesScreen() {
@@ -123,18 +121,8 @@ export default function FavoritesScreen() {
     } catch {}
   };
 
-  // Slot tabanlı liste: 7 ilan → 1 reklam → 7 ilan → ...
   const listItems = useMemo<FavRow[]>(() => {
-    const slots: FavSlot[] = [];
-    let adCount = 0;
-    for (let i = 0; i < favoriteDiscounts.length; i++) {
-      slots.push({ kind: 'discount', item: favoriteDiscounts[i] });
-      // Favoriler native reklamı — AdMob onayına kadar KAPALI
-      if (EXTRA_AD_PLACEMENTS && (i + 1) % 7 === 0) {
-        adCount++;
-        slots.push({ kind: 'ad', adKey: `fav-ad-${adCount}` });
-      }
-    }
+    const slots: FavSlot[] = favoriteDiscounts.map(item => ({ kind: 'discount', item }));
     const rows: FavRow[] = [];
     for (let i = 0; i < slots.length; i += 2) {
       rows.push({ rowKey: `fav-row-${i}`, left: slots[i], right: slots[i + 1] ?? null });
@@ -144,13 +132,6 @@ export default function FavoritesScreen() {
 
   const renderSlot = useCallback((slot: FavSlot | null) => {
     if (!slot) return <View style={styles.cardWrapper} />;
-    if (slot.kind === 'ad') {
-      return (
-        <View style={styles.cardWrapper}>
-          <NativeAdCard compact cacheKey={slot.adKey} />
-        </View>
-      );
-    }
     return (
       <View style={styles.cardWrapper}>
         <DiscountCard

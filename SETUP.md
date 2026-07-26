@@ -20,44 +20,7 @@
 
 ---
 
-## 2. AdMob Hesabı Kur (Gerçek Reklam için)
-
-### Test Modunda (şu an aktif)
-Uygulama şu an **Google test reklamlarını** gösteriyor. Gerçek parayı kazanmak için:
-
-1. [AdMob Console](https://admob.google.com) → Yeni uygulama ekle → Android
-2. Paket adı: `com.indivanative`
-3. Aşağıdaki reklam birimlerini oluştur:
-   - **Banner** (Ana ekran ilanlar arası) → ID'yi kopyala
-   - **Interstitial** (Discount detaydan linke gidince) → ID'yi kopyala
-4. **Uygulama ID'sini** (format: `ca-app-pub-XXXX~YYYY`) kopyala
-
-### Dosyalarda değiştir:
-
-**`android/app/src/main/AndroidManifest.xml`** — `APPLICATION_ID` değerini güncelle:
-```xml
-<meta-data
-    android:name="com.google.android.gms.ads.APPLICATION_ID"
-    android:value="ca-app-pub-XXXXX~YYYYYY"/>   <!-- kendi App ID'nizi buraya -->
-```
-
-**`src/screens/HomeScreen.tsx`** — Banner ID:
-```ts
-const BANNER_AD_UNIT_ID = __DEV__
-  ? TestIds.BANNER
-  : 'ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY';  // kendi Banner ID'niz
-```
-
-**`src/screens/DetailScreen.tsx`** — Interstitial ID:
-```ts
-const INTERSTITIAL_AD_UNIT_ID = __DEV__
-  ? TestIds.INTERSTITIAL
-  : 'ca-app-pub-XXXXXXXXXXXXXXXX/ZZZZZZZZZZ';  // kendi Interstitial ID'niz
-```
-
----
-
-## 3. Uygulamayı Çalıştır
+## 2. Uygulamayı Çalıştır
 
 ```bash
 # Bağımlılıkları kur
@@ -73,7 +36,7 @@ npx react-native run-android
 
 ---
 
-## 4. Release APK Oluştur
+## 3. Release APK Oluştur
 
 ### Keystore Oluştur (ilk kez)
 ```bash
@@ -110,20 +73,7 @@ cd android
 
 ---
 
-## 5. Reklam Yerleşim Noktaları
-
-| Yer | Tür | Dosya |
-|-----|-----|-------|
-| Ana ekranda her 8 kartta bir | Banner (FULL_BANNER) | `HomeScreen.tsx` |
-| İndirime git butonundan sonra | Interstitial | `DetailScreen.tsx` |
-
-Daha fazla reklam eklemek için:
-- **Aktüel detay sayfası görsel arası** → `AktuelDetailScreen.tsx`
-- **Kazan sayfasına banner** → `KazanScreen.tsx`
-
----
-
-## 6. Uygulama Kimliği Değiştirme (Opsiyonel)
+## 4. Uygulama Kimliği Değiştirme (Opsiyonel)
 
 Uygulamayı Play Store'a kendi ID'nizle yüklemek istiyorsanız:
 
@@ -136,7 +86,7 @@ applicationId "com.indiva.app"  // istediğiniz paket adı
 
 ---
 
-## 7. Eksik Olmayan Özellikler (Orijinal ile %100 Uyumlu)
+## 5. Eksik Olmayan Özellikler (Orijinal ile %100 Uyumlu)
 
 ✅ Ana ekran — indirim listesi, arama, kategori filtresi, pull-to-refresh  
 ✅ İlan detayı — oylama, favorileme, paylaşma, indirim kodu kopyalama  
@@ -148,5 +98,3 @@ applicationId "com.indiva.app"  // istediğiniz paket adı
 ✅ Karanlık/Açık/Sistem teması  
 ✅ FCM push bildirimleri  
 ✅ Offline cache (AsyncStorage)  
-✅ AdMob banner ve interstitial reklamlar  
-✅ İlanlar arası inline banner reklam (yeni özellik!)  

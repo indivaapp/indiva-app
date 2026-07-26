@@ -32,12 +32,7 @@ export default function ProfilePrivacyScreen() {
         Toplanan veriler yalnızca uygulama deneyimini iyileştirmek, ilgili indirimleri göstermek ve bildirim göndermek amacıyla kullanılır. Kişisel verileriniz üçüncü taraflarla paylaşılmaz.
       </Text>
 
-      <Text style={[styles.heading, { color: isDark ? Colors.white : Colors.gray800 }]}>3. Reklamlar</Text>
-      <Text style={[styles.body, { color: textColor }]}>
-        Uygulama, Google AdMob aracılığıyla kişiselleştirilmemiş reklamlar gösterebilir. Google'ın gizlilik politikası için: https://policies.google.com/privacy
-      </Text>
-
-      <Text style={[styles.heading, { color: isDark ? Colors.white : Colors.gray800 }]}>4. İletişim</Text>
+      <Text style={[styles.heading, { color: isDark ? Colors.white : Colors.gray800 }]}>3. İletişim</Text>
       <Text style={[styles.body, { color: textColor }]}>
         Gizlilik politikamız hakkında sorularınız için: indivaapp@gmail.com
       </Text>
