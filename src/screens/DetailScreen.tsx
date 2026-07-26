@@ -692,8 +692,12 @@ export default function DetailScreen({ route }: Props) {
             onPress={() => setLightboxVisible(true)}
             activeOpacity={0.9}
           >
-            {/* Blur bg */}
+            {/* Blur bg — key={d.imageUrl} ürün değiştiğinde bileşeni tamamen
+                yeniden mount eder; aksi halde src değişince eski bulanık
+                görsel yeni yüklenene kadar ekranda donuk kalıp aniden
+                "flaşla" değişiyordu (asıl kaydırma flaşı şikayetinin kaynağı). */}
             <Image
+              key={d.imageUrl}
               source={{ uri: d.imageUrl }}
               style={StyleSheet.absoluteFill}
               blurRadius={14}
@@ -1063,6 +1067,7 @@ export default function DetailScreen({ route }: Props) {
               {/* Hero image preview */}
               <View style={styles.heroContainer}>
                 <Image
+                  key={inc.imageUrl}
                   source={{ uri: inc.imageUrl }}
                   style={StyleSheet.absoluteFill}
                   blurRadius={14}
@@ -1261,6 +1266,7 @@ export default function DetailScreen({ route }: Props) {
       >
         <View style={styles.lightboxOverlay} {...lbPinchPan.panHandlers}>
           <Animated.Image
+            key={d.imageUrl}
             source={{ uri: d.imageUrl }}
             style={[styles.lightboxImage, { transform: [{ scale: lbZoom }] }]}
             resizeMode="contain"
