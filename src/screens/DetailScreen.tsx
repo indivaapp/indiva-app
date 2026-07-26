@@ -37,6 +37,7 @@ import OptimizedImage from '../components/OptimizedImage';
 import DiscountCard from '../components/DiscountCard';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
+import { haptic } from '../utils/haptics';
 import type { RootStackParamList } from '../navigation';
 import type { Discount } from '../types';
 
@@ -341,6 +342,20 @@ export default function DetailScreen({ route }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDiscountIdForView, localDiscount?.activeVotes, localDiscount?.expiredVotes, discount?.activeVotes, discount?.expiredVotes]);
 
+  // Bir sonraki/önceki üründe kaydırma sırasında görsel yüklenmesini beklememek
+  // için (kullanıcı şikayeti: "kasarak geçiyor... önceki görüntü flaş ile
+  // gösteriyor") komşu ürünlerin görselini önceden RN'in native cache'ine
+  // indiriyoruz. Kaydırma jesti başladığında (hatta çoğu zaman kullanıcı daha
+  // dokunmadan, ürün değişir değişmez) görsel zaten hazır oluyor.
+  useEffect(() => {
+    const list = routeList;
+    if (!list || localIndex < 0) return;
+    const next = list[localIndex + 1];
+    const prev = list[localIndex - 1];
+    if (next?.imageUrl) Image.prefetch(next.imageUrl).catch(() => {});
+    if (prev?.imageUrl) Image.prefetch(prev.imageUrl).catch(() => {});
+  }, [routeList, localIndex]);
+
   // postTransitionRef useEffect: positions reset AFTER React commits new localIndex —
   // prevents the 1-frame flash of old content when slideX.setValue(0) fires before render.
   useEffect(() => {
@@ -546,6 +561,7 @@ export default function DetailScreen({ route }: Props) {
   const userVoteType = getUserVoteType(d.id);
 
   const handleShare = async () => {
+    haptic();
     const shareUrl = d.link || `https://indiva.app/detay/${d.id}`;
     const text = `🔥 İNDİVA'da ${discountPercentage > 0 ? `%${discountPercentage} indirimli ` : ''}fırsat!\n${d.title}\n${shareUrl}`;
     const waUrl = `whatsapp://send?text=${encodeURIComponent(text)}`;
@@ -558,6 +574,7 @@ export default function DetailScreen({ route }: Props) {
   };
 
   const handleToggleFavorite = async () => {
+    haptic();
     Animated.sequence([
       Animated.spring(heartScale, { toValue: 1.45, friction: 3, tension: 200, useNativeDriver: true }),
       Animated.spring(heartScale, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }),
@@ -583,6 +600,7 @@ export default function DetailScreen({ route }: Props) {
 
   const handleVote = async (voteType: 'active' | 'expired') => {
     if (userVoted || voteCalculating) return;
+    haptic();
 
     // Oyu hemen kaydet + "hesaplanıyor" fazına gir (oranlar bu fazda gizlenir → flicker yok)
     setMyVoteType(voteType);
@@ -627,6 +645,7 @@ export default function DetailScreen({ route }: Props) {
 
   const handleCopyCode = () => {
     if (!d.discountCode) return;
+    haptic();
     Clipboard.setString(d.discountCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

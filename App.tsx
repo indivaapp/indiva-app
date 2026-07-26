@@ -77,6 +77,19 @@ function AppContent() {
   const [notificationCount, setNotificationCount] = useState(0);
   const [adsContext, setAdsContext] = useState<{ ready: boolean; nonPersonalized: boolean }>({ ready: false, nonPersonalized: true });
 
+  // Tema (açık/koyu) değişimi her ekranda anlık renk değişimiyle uygulanıyor —
+  // her ekranı tek tek Animated renk interpolasyonuna çevirmek çok invaziv
+  // olacağından, kök seviyede kısa bir "geçiş flaşı" ile ani rengi
+  // yumuşatıyoruz: tema değişir değişmez yeni temanın rengiyle hafifçe
+  // belirip hemen söner — sert kesme yerine yumuşak bir his verir.
+  const themeFadeAnim = useRef(new Animated.Value(0)).current;
+  const isFirstThemeRenderRef = useRef(true);
+  useEffect(() => {
+    if (isFirstThemeRenderRef.current) { isFirstThemeRenderRef.current = false; return; }
+    themeFadeAnim.setValue(0.35);
+    Animated.timing(themeFadeAnim, { toValue: 0, duration: 240, useNativeDriver: true }).start();
+  }, [isDark, themeFadeAnim]);
+
   // NOT: App Open reklamı tamamen kaldırıldı (bkz. git geçmişi — AppOpenAd,
   // lastAppOpenRef, splashVisibleRef, ilgili iki useEffect). AdMob'un tekrar
   // eden "Değiştirilmiş reklam davranışı" reddi için şüpheli yüzeyleri elemek
@@ -158,6 +171,13 @@ function AppContent() {
           backgroundColor={isDark ? Colors.gray900 : Colors.white}
         />
         <RootNavigator notificationCount={notificationCount} />
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: isDark ? Colors.gray900 : Colors.white, opacity: themeFadeAnim },
+          ]}
+        />
         {splashVisible && (
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: splashOpacity }]}>
             <SplashScreen />

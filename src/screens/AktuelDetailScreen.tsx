@@ -207,6 +207,19 @@ export default function AktuelDetailScreen({ route }: Props) {
       .finally(() => setIsLoading(false));
   }, [storeName]);
 
+  // Lightbox'ta sayfalar arası kaydırma "kasıyor/flaş ile geçiyor" şikayeti:
+  // Animated.Image'ın source.uri'si lightboxIndex değişince DOĞRUDAN
+  // değiştiriliyordu, önceden hiçbir yükleme yapılmadan — komşu sayfaların
+  // tam çözünürlüklü görselini önceden native cache'e indirerek geçişi
+  // anlık hale getiriyoruz.
+  useEffect(() => {
+    if (lightboxIndex < 0) return;
+    const next = brochures[lightboxIndex + 1];
+    const prev = brochures[lightboxIndex - 1];
+    if (next?.imageUrl) Image.prefetch(next.imageUrl).catch(() => {});
+    if (prev?.imageUrl) Image.prefetch(prev.imageUrl).catch(() => {});
+  }, [lightboxIndex, brochures]);
+
   if (isLoading) {
     return (
       <View style={[styles.center, { backgroundColor: bg }]}>
