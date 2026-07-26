@@ -168,6 +168,8 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
     <TouchableOpacity
       onPress={handleCardPress}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`${discount.title}${discountPercentage > 0 ? `, %${discountPercentage} indirim` : ''}`}
       style={[
         styles.card,
         {
@@ -234,6 +236,8 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
               onPress={onToggleFavorite}
               style={[styles.actionBtn, { backgroundColor: 'rgba(0,0,0,0.38)' }]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={isFavorite ? 'Favorilerden çıkar' : 'Favorilere ekle'}
             >
               <Animated.Text style={{ fontSize: 16, transform: [{ scale: heartScale }] }}>
                 {isFavorite ? '❤️' : '🤍'}
@@ -244,6 +248,8 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
             onPress={handleShare}
             style={[styles.actionBtn, { backgroundColor: 'rgba(0,0,0,0.38)' }]}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Paylaş"
           >
             <Text style={{ fontSize: 16 }}>🔗</Text>
           </TouchableOpacity>
@@ -308,6 +314,8 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
         <TouchableOpacity
           onPress={handleGoToDiscount}
           disabled={(isExpired || isServerExpired) && !isAd}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: (isExpired || isServerExpired) && !isAd }}
           style={[
             styles.ctaButton,
             {

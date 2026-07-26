@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Animated, PanResponder, Image,
+  View, Text, TouchableOpacity, StyleSheet,
+  Animated, PanResponder, Image, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -186,8 +187,14 @@ export default function NotificationsScreen() {
       try {
         const stories = await fetchStoriesCached();
         const idx = stories.findIndex(s => s.id === notif.storyId);
-        if (idx >= 0) navigation.navigate('StoryDetail', { stories, initialIndex: idx });
-      } catch {}
+        if (idx >= 0) {
+          navigation.navigate('StoryDetail', { stories, initialIndex: idx });
+        } else {
+          Alert.alert('Bulunamadı', 'Bu story artık mevcut değil.');
+        }
+      } catch {
+        Alert.alert('Bağlantı hatası', 'Story yüklenemedi. Lütfen tekrar deneyin.');
+      }
     }
   };
 
@@ -248,7 +255,7 @@ export default function NotificationsScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={notifications}
           keyExtractor={item => item.id}
           contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}

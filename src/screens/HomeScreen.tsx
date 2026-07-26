@@ -3,10 +3,8 @@ import {
   View,
   Text,
   TextInput,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
-  RefreshControl,
   ActivityIndicator,
   ScrollView,
   StatusBar,
@@ -15,6 +13,7 @@ import {
   Animated,
   AppState,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -43,6 +42,8 @@ import { CATEGORIES, normalizeCategory } from '../constants/categories';
 import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
+
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList as any) as any;
 
 interface HomeScreenProps {
   notificationCount: number;
@@ -562,7 +563,11 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
               returnKeyType="search"
             />
             {searchTerm.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchTerm('')}>
+              <TouchableOpacity
+                onPress={() => setSearchTerm('')}
+                accessibilityRole="button"
+                accessibilityLabel="Aramayı temizle"
+              >
                 <Text style={{ color: Colors.gray400, fontSize: 16 }}>✕</Text>
               </TouchableOpacity>
             )}
@@ -571,6 +576,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
             <TouchableOpacity
               style={[styles.bellBtn, { backgroundColor: inputBg }]}
               onPress={() => navigation.navigate('Notifications')}
+              accessibilityRole="button"
+              accessibilityLabel={notificationCount > 0 ? `Bildirimler, ${notificationCount} okunmamış` : 'Bildirimler'}
             >
               <Text style={styles.bellIcon}>🔔</Text>
               {notificationCount > 0 && (
@@ -634,16 +641,11 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
         </View>
       )}
 
-      <Animated.FlatList
+      <AnimatedFlashList
         ref={flatListRef}
         data={listItems}
         keyExtractor={(item: HomeRow) => item.rowKey}
         renderItem={renderItem}
-        removeClippedSubviews={true}
-        windowSize={5}
-        maxToRenderPerBatch={4}
-        initialNumToRender={4}
-        updateCellsBatchingPeriod={30}
         style={{ flex: 1, opacity: listFade, display: (isLoading || isCategoryPending) && filteredDiscounts.length === 0 ? 'none' : 'flex' }}
         contentContainerStyle={[styles.listContainer, { paddingBottom: insets.bottom + 80 }]}
         ListHeaderComponent={
@@ -667,6 +669,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
                 <TouchableOpacity
                   key={cat}
                   onPress={() => setSelectedCategory(cat)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: selectedCategory === cat }}
                   style={[
                     styles.catChip,
                     {
@@ -705,14 +709,8 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
           else loadMoreCategory();
         }}
         onEndReachedThreshold={0.3}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={onRefresh}
-            tintColor={Colors.orange}
-            colors={[Colors.orange]}
-          />
-        }
+        refreshing={isRefreshing}
+        onRefresh={onRefresh}
         ListFooterComponent={
           isLoading && discounts.length > 0 ? (
             <ActivityIndicator color={Colors.orange} style={{ marginVertical: 20 }} />
@@ -728,7 +726,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
             </View>
           ) : null
         }
-      />
+        />
 
       {/* Exit confirmation modal */}
       <Modal visible={showExitModal} transparent animationType="fade">

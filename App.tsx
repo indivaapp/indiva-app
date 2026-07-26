@@ -74,6 +74,7 @@ function AppContent() {
   const isDark = effectiveTheme === 'dark';
   const [splashVisible, setSplashVisible] = useState(true);
   const splashOpacity = useRef(new Animated.Value(1)).current;
+  const mountTimeRef = useRef(Date.now());
   const [notificationCount, setNotificationCount] = useState(0);
   const [adsContext, setAdsContext] = useState<{ ready: boolean; nonPersonalized: boolean }>({ ready: false, nonPersonalized: true });
 
@@ -135,13 +136,19 @@ function AppContent() {
       })
       .finally(() => {
         setNotificationCount(getNotificationCount());
+        // Splash'ı sabit bir sürede değil, gerçek yükleme bittiğinde kaldırıyoruz —
+        // sadece marka animasyonunun göz kırpıp gitmemesi için kısa bir alt sınır
+        // (MIN_SPLASH_MS) uyguluyoruz; yükleme daha uzun sürdüyse ek bekleme yok.
+        const MIN_SPLASH_MS = 900;
+        const elapsed = Date.now() - mountTimeRef.current;
+        const remaining = Math.max(0, MIN_SPLASH_MS - elapsed);
         setTimeout(() => {
           Animated.timing(splashOpacity, {
             toValue: 0,
             duration: 400,
             useNativeDriver: true,
           }).start(() => setSplashVisible(false));
-        }, 1400);
+        }, remaining);
       });
 
     // Push notifications — hata olursa uygulama çökmemeli

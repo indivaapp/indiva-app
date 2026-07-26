@@ -17,6 +17,8 @@ export default function BackButton({ onPress }: Props) {
       style={styles.btn}
       hitSlop={{ top: 10, right: 16, bottom: 10, left: 4 }}
       activeOpacity={0.65}
+      accessibilityRole="button"
+      accessibilityLabel="Geri"
     >
       <Text style={styles.chevron}>‹</Text>
     </TouchableOpacity>

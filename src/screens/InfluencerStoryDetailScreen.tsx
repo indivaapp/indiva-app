@@ -815,6 +815,8 @@ export default function StoryDetailScreen({ route }: Props) {
             onPressOut={handlePressOut}
             onPress={() => { if (Date.now() - pressStartTimeRef.current < LONG_PRESS_DELAY) goTo(currentIndex - 1, 'prev'); }}
             activeOpacity={1}
+            accessibilityRole="button"
+            accessibilityLabel="Önceki story"
           />
           <TouchableOpacity
             style={styles.tapRight}
@@ -822,6 +824,8 @@ export default function StoryDetailScreen({ route }: Props) {
             onPressOut={handlePressOut}
             onPress={() => { if (Date.now() - pressStartTimeRef.current < LONG_PRESS_DELAY) advanceForward(currentIndex); }}
             activeOpacity={1}
+            accessibilityRole="button"
+            accessibilityLabel="Sonraki story"
           />
         </View>
 
@@ -946,7 +950,7 @@ export default function StoryDetailScreen({ route }: Props) {
           })()}
         </View>
         <Text style={styles.timeAgoText}>{timeAgo(story.createdAt)}</Text>
-        <TouchableOpacity style={styles.closeBtn} onPress={animateDismiss}>
+        <TouchableOpacity style={styles.closeBtn} onPress={animateDismiss} accessibilityRole="button" accessibilityLabel="Kapat">
           <Text style={styles.closeBtnText}>✕</Text>
         </TouchableOpacity>
       </Animated.View>
