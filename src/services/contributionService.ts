@@ -106,14 +106,14 @@ export async function getContributionStats(): Promise<ContributionStats> {
   } catch {}
 
   const visitCount = Math.min(rawVisits, 50);
-  // Temel puan + ödüllü reklamdan kazanılan bonus puan
+  // Temel puan + bonus puan (bkz. rewardService — günlük giriş serisi vb.)
   // Oy ×5, Favori ×3, İnceleme ×2
   const bonusPoints = await getBonusPoints();
   const points = voteCount * 5 + favoriteCount * 3 + visitCount * 2 + bonusPoints;
 
   const claimedMin = await getClaimedTierMin();
 
-  // Displayed badge = claimed tier (what the user has unlocked via ad)
+  // Displayed badge = claimed tier (what the user has unlocked)
   const displayedBadge =
     SORTED_TIERS.slice().reverse().find(t => t.min <= claimedMin) ??
     SORTED_TIERS[0];

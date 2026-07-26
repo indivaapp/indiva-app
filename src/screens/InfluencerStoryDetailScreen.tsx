@@ -167,11 +167,6 @@ export default function StoryDetailScreen({ route }: Props) {
   const goToRef = useRef<(n: number, d: 'next' | 'prev') => void>(() => {});
   const resumeRef = useRef<() => void>(() => {});
 
-  // NOT: Story interstitial reklami tamamen kaldirildi (bkz. git gecmisi).
-  // AdMob "Degistirilmis reklam davranisi" ihlalini tekrar tekrar reddetti;
-  // bu format (tam ekran + PanResponder'in kapladigi ayni dokunma bolgesinden
-  // tetiklenmesi) en riskli yuzeydi. Once native+rewarded ile onay alip,
-  // ayri bir surumde tek basina geri eklemek daha guvenli.
   const advanceForwardRef = useRef<(fromIndex: number) => void>(() => {});
 
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
@@ -985,9 +980,6 @@ export default function StoryDetailScreen({ route }: Props) {
           onLoad={() => setIncomingLoaded(true)}
         />
       </Animated.View>
-
-      {/* Story interstitial reklamı Google tarafından tam ekran sunulur —
-          burada görsel bileşen yok; advanceForward içinde .show() ile gösterilir. */}
     </Animated.View>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar, StyleSheet, NativeModules, Platform, Animated, Alert } from 'react-native';
 
 // Global JS hata yakalayıcı — uygulamanın sessizce kapanmasını önler
@@ -21,7 +21,6 @@ import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { Colors } from './src/constants/colors';
 import RootNavigator from './src/navigation';
 import SplashScreen from './src/components/SplashScreen';
-import MobileAds, { AdsConsent, AdsConsentStatus } from 'react-native-google-mobile-ads';
 import {
   loadVotesCache,
 } from './src/services/voteService';
@@ -41,34 +40,6 @@ import { navigationRef } from './src/navigation/navigationRef';
 
 const { NavigationBar } = NativeModules;
 
-// ─── Ads Context ─────────────────────────────────────────────────────────────
-// ready          : MobileAds.initialize() tamamlandı, reklam isteği atılabilir.
-// nonPersonalized: UMP onay durumuna göre; true → kişiselleştirilmemiş reklam.
-interface AdsContextValue { ready: boolean; nonPersonalized: boolean; }
-export const AdsReadyContext = createContext<AdsContextValue>({ ready: false, nonPersonalized: true });
-export function useAdsReady(): boolean        { return useContext(AdsReadyContext).ready; }
-export function useNonPersonalized(): boolean { return useContext(AdsReadyContext).nonPersonalized; }
-
-// ─── UMP (Kullanıcı Onay) yardımcısı ─────────────────────────────────────────
-// AB/AEA kullanıcıları için GDPR onay formunu gösterir, sonucu döner.
-// true  → kişiselleştirilmemiş reklam (onay verilmedi veya hata)
-// false → kişiselleştirilmiş reklam (onay verildi veya bölge dışı)
-async function resolveConsent(): Promise<boolean> {
-  try {
-    const info = await AdsConsent.requestInfoUpdate();
-    if (info.isConsentFormAvailable && info.status === AdsConsentStatus.REQUIRED) {
-      await AdsConsent.showForm();
-    }
-    const final = await AdsConsent.getConsentInfo();
-    // NOT_REQUIRED: AB dışı kullanıcı → kişiselleştirilmiş gösterebilirsin
-    // OBTAINED    : onay verildi      → kişiselleştirilmiş gösterebilirsin
-    return final.status !== AdsConsentStatus.NOT_REQUIRED &&
-           final.status !== AdsConsentStatus.OBTAINED;
-  } catch {
-    return true; // Güvenli varsayılan: onay yoksa kişiselleştirilmemiş
-  }
-}
-
 function AppContent() {
   const { effectiveTheme } = useTheme();
   const isDark = effectiveTheme === 'dark';
@@ -76,7 +47,6 @@ function AppContent() {
   const splashOpacity = useRef(new Animated.Value(1)).current;
   const mountTimeRef = useRef(Date.now());
   const [notificationCount, setNotificationCount] = useState(0);
-  const [adsContext, setAdsContext] = useState<{ ready: boolean; nonPersonalized: boolean }>({ ready: false, nonPersonalized: true });
 
   // Tema (açık/koyu) değişimi her ekranda anlık renk değişimiyle uygulanıyor —
   // her ekranı tek tek Animated renk interpolasyonuna çevirmek çok invaziv
@@ -91,13 +61,6 @@ function AppContent() {
     Animated.timing(themeFadeAnim, { toValue: 0, duration: 240, useNativeDriver: true }).start();
   }, [isDark, themeFadeAnim]);
 
-  // NOT: App Open reklamı tamamen kaldırıldı (bkz. git geçmişi — AppOpenAd,
-  // lastAppOpenRef, splashVisibleRef, ilgili iki useEffect). AdMob'un tekrar
-  // eden "Değiştirilmiş reklam davranışı" reddi için şüpheli yüzeyleri elemek
-  // amacıyla, düşük reklam hacmi (haftada ~133 istek) göz önüne alınarak
-  // kaldırıldı — literatürde bu format şeffaflık/sıralama sorunlarıyla en sık
-  // ilişkilendirilen tür. Tekrar eklemek gerekirse commit geçmişinden bakılabilir.
-
   // Sync Android system navigation bar color with app theme
   useEffect(() => {
     if (Platform.OS === 'android' && NavigationBar) {
@@ -109,27 +72,7 @@ function AppContent() {
   }, [isDark]);
 
   useEffect(() => {
-    // Hash almak için: adb logcat | grep "Use RequestConfiguration"
-    // Çıkan satırdaki hex string'i listeye ekle.
-    // __DEV__ koşulu: sadece geliştirme build'inde test cihazı tanımlanır,
-    // release APK'da gerçek reklamlar gösterilir.
-    const TEST_DEVICE_HASHES: string[] = __DEV__
-      ? ['EMULATOR', '03731AD40F3E5BDD714AD4BDB10BE0F4']
-      : [];
-
-    // 1. UMP onay akışı (GDPR/CCPA) → 2. SDK init → 3. Uygulama yükle
-    resolveConsent()
-      .then(nonPersonalized =>
-        MobileAds()
-          .setRequestConfiguration({ testDeviceIdentifiers: TEST_DEVICE_HASHES })
-          .then(() => MobileAds().initialize())
-          .then(() => {
-            // initialize() garantili tamamlandıktan sonra işaretle.
-            // Reklam bileşenleri bu flag'i bekler — race condition'ı engeller.
-            setAdsContext({ ready: true, nonPersonalized });
-            return Promise.all([loadVotesCache(), loadNotificationsCache()]);
-          }),
-      )
+    Promise.all([loadVotesCache(), loadNotificationsCache()])
       .then(() => {
         // Günlük seri — açılışta bir kez güncelle (bugün ilkse puan ekler)
         updateStreakOnOpen().catch(() => {});
@@ -171,27 +114,25 @@ function AppContent() {
   }, []);
 
   return (
-    <AdsReadyContext.Provider value={adsContext}>
-      <NavigationContainer ref={navigationRef} onReady={handlePendingNotification}>
-        <StatusBar
-          barStyle={isDark ? 'light-content' : 'dark-content'}
-          backgroundColor={isDark ? Colors.gray900 : Colors.white}
-        />
-        <RootNavigator notificationCount={notificationCount} />
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFill,
-            { backgroundColor: isDark ? Colors.gray900 : Colors.white, opacity: themeFadeAnim },
-          ]}
-        />
-        {splashVisible && (
-          <Animated.View style={[StyleSheet.absoluteFill, { opacity: splashOpacity }]}>
-            <SplashScreen />
-          </Animated.View>
-        )}
-      </NavigationContainer>
-    </AdsReadyContext.Provider>
+    <NavigationContainer ref={navigationRef} onReady={handlePendingNotification}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={isDark ? Colors.gray900 : Colors.white}
+      />
+      <RootNavigator notificationCount={notificationCount} />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          { backgroundColor: isDark ? Colors.gray900 : Colors.white, opacity: themeFadeAnim },
+        ]}
+      />
+      {splashVisible && (
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: splashOpacity }]}>
+          <SplashScreen />
+        </Animated.View>
+      )}
+    </NavigationContainer>
   );
 }
 

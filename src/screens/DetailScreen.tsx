@@ -23,8 +23,6 @@ import {
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import NativeAdCard from '../components/NativeAdCard';
-import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { incrementVisitCount } from '../services/contributionService';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -766,10 +764,6 @@ export default function DetailScreen({ route }: Props) {
             <Text style={[styles.discountTitle, { color: textColor }]}>{d.title}</Text>
           </Animated.View>
 
-          {/* Native reklam — yatay şerit. AdMob onayına kadar KAPALI
-              (AdChoices çakışma riski olan yerleşim). */}
-          {EXTRA_AD_PLACEMENTS && <NativeAdCard horizontal />}
-
           {/* ── Sponsorlu ilan açıklaması ───────────────────────────── */}
           {isAd && !!d.description && (
             <View style={[styles.descriptionCard, {
@@ -997,43 +991,23 @@ export default function DetailScreen({ route }: Props) {
             <View>
               <Text style={[styles.similarTitle, { color: isDark ? Colors.gray200 : Colors.gray700 }]}>🛍️ Benzer Fırsatlar</Text>
               <View style={styles.similarGrid}>
-                {(() => {
-                  // Her 6 ilandan sonra 1 compact native reklam (ana sayfadaki gibi).
-                  // flex-wrap 2 sütun olduğu için reklam bir sağ bir sol otomatik düşer.
-                  const items: Array<{ ad: false; deal: Discount } | { ad: true; key: string }> = [];
-                  let adCount = 0;
-                  similarDiscounts.forEach((item, i) => {
-                    items.push({ ad: false, deal: item });
-                    // Benzer fırsatlar native reklamı — AdMob onayına kadar KAPALI
-                    if (EXTRA_AD_PLACEMENTS && (i + 1) % 6 === 0) {
-                      items.push({ ad: true, key: `similar-${d.id}-ad-${adCount}` });
-                      adCount++;
-                    }
-                  });
-                  return items.map(it =>
-                    it.ad ? (
-                      <View key={it.key} style={styles.similarCard}>
-                        <NativeAdCard compact cacheKey={it.key} />
-                      </View>
-                    ) : (
-                      <View key={it.deal.id} style={styles.similarCard}>
-                        <DiscountCard
-                          discount={it.deal}
-                          isFavorite={favorites.includes(it.deal.id)}
-                          onToggleFavorite={() => {
-                            const next = favorites.includes(it.deal.id)
-                              ? favorites.filter(f => f !== it.deal.id)
-                              : [...favorites, it.deal.id];
-                            setFavorites(next);
-                            AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(next));
-                          }}
-                          isExpired={isDiscountExpired(it.deal)}
-                          discountList={similarDiscounts}
-                        />
-                      </View>
-                    ),
-                  );
-                })()}
+                {similarDiscounts.map(deal => (
+                  <View key={deal.id} style={styles.similarCard}>
+                    <DiscountCard
+                      discount={deal}
+                      isFavorite={favorites.includes(deal.id)}
+                      onToggleFavorite={() => {
+                        const next = favorites.includes(deal.id)
+                          ? favorites.filter(f => f !== deal.id)
+                          : [...favorites, deal.id];
+                        setFavorites(next);
+                        AsyncStorage.setItem('favoriteDiscounts', JSON.stringify(next));
+                      }}
+                      isExpired={isDiscountExpired(deal)}
+                      discountList={similarDiscounts}
+                    />
+                  </View>
+                ))}
               </View>
               {similarLoading && (
                 <ActivityIndicator

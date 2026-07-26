@@ -27,8 +27,6 @@ import {
   saveHomeCache,
   HOME_CACHE_TTL,
 } from '../services/firebaseService';
-import NativeAdCard from '../components/NativeAdCard';
-import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
 import { isDiscountExpired, isHiddenFromFeed, loadVotesCache } from '../services/voteService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Discount, Story } from '../types';
@@ -431,7 +429,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   }, [discounts, catDiscounts, debouncedSearch, selectedCategory]);
 
 
-  type HomeSlot = { kind: 'discount'; item: Discount } | { kind: 'ad'; adKey: string };
+  type HomeSlot = { kind: 'discount'; item: Discount };
   type HomeRow = { rowKey: string; layout: 'pair'; left: HomeSlot; right: HomeSlot | null };
 
   // ── Debounce: searchTerm → debouncedSearch (300ms) ───────────────
@@ -482,19 +480,7 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
   const isCategoryPending = selectedCategory !== 'Tümü' && catResultsFor !== selectedCategory;
 
   const listItems = useMemo<HomeRow[]>(() => {
-    // Düz slot dizisi: her 6 ilandan sonra 1 reklam ekle.
-    // 6 ilan + 1 reklam = 7 (tek sayı) → 2'şerli pair'lere bölününce reklam
-    // bir satırda solda, sonrakinde sağda... şeklinde dönüşümlü yer alır.
-    const slots: HomeSlot[] = [];
-    let adCount = 0;
-    for (let i = 0; i < filteredDiscounts.length; i++) {
-      slots.push({ kind: 'discount', item: filteredDiscounts[i] });
-      // Anasayfa native reklamı — AdMob onayına kadar KAPALI (tüm native'ler kapalı)
-      if (EXTRA_AD_PLACEMENTS && (i + 1) % 6 === 0) {
-        slots.push({ kind: 'ad', adKey: `home-ad-${adCount}` });
-        adCount++;
-      }
-    }
+    const slots: HomeSlot[] = filteredDiscounts.map(item => ({ kind: 'discount', item }));
 
     const rows: HomeRow[] = [];
     for (let i = 0; i < slots.length; i += 2) {
@@ -510,13 +496,6 @@ export default function HomeScreen({ notificationCount }: HomeScreenProps) {
 
   const renderDiscountSlot = useCallback((slot: HomeSlot | null) => {
     if (!slot) return <View style={styles.cardWrapper} />;
-    if (slot.kind === 'ad') {
-      return (
-        <View style={styles.cardWrapper}>
-          <NativeAdCard compact cacheKey={slot.adKey} />
-        </View>
-      );
-    }
     return (
       <View key={slot.item.id} style={styles.cardWrapper}>
         <DiscountCard

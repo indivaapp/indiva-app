@@ -13,8 +13,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { fetchBrochuresByStore } from '../services/firebaseService';
 import OptimizedImage from '../components/OptimizedImage';
-import NativeAdCard from '../components/NativeAdCard';
-import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import type { RootStackParamList } from '../navigation';
@@ -22,7 +20,6 @@ import type { Brochure } from '../types';
 
 type ListItem =
   | { type: 'brochure'; data: Brochure; index: number }
-  | { type: 'ad'; adKey: string }
   | { type: 'footer' };
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AktuelDetail'>;
@@ -258,27 +255,14 @@ export default function AktuelDetailScreen({ route }: Props) {
     );
   }
 
-  const listData: ListItem[] = [];
-  let adCount = 0;
-  brochures.forEach((item, i) => {
-    listData.push({ type: 'brochure', data: item, index: i });
-    // Her 4 broşürde bir tam genişlik native reklam — AdMob onayına kadar KAPALI
-    if (EXTRA_AD_PLACEMENTS && (i + 1) % 4 === 0) {
-      listData.push({ type: 'ad', adKey: `aktuel-${storeName}-ad-${adCount}` });
-      adCount++;
-    }
-  });
+  const listData: ListItem[] = brochures.map((item, i) => ({ type: 'brochure', data: item, index: i }));
   listData.push({ type: 'footer' });
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       <FlashList
         data={listData}
-        keyExtractor={item =>
-          item.type === 'brochure' ? item.data.id
-          : item.type === 'ad' ? item.adKey
-          : '__footer__'
-        }
+        keyExtractor={item => item.type === 'brochure' ? item.data.id : '__footer__'}
         getItemType={item => item.type}
         contentContainerStyle={[
           styles.listContainer,
@@ -287,10 +271,6 @@ export default function AktuelDetailScreen({ route }: Props) {
         renderItem={({ item }) => {
           if (item.type === 'footer') {
             return <View style={{ height: 16 }} />;
-          }
-          if (item.type === 'ad') {
-            // Akış içi tam genişlik native reklam (havuz cache'li)
-            return <NativeAdCard cacheKey={item.adKey} />;
           }
           const { data, index } = item;
           return (

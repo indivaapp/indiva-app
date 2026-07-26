@@ -12,9 +12,6 @@ import {
 } from '../services/contributionService';
 import { loadVotesCache } from '../services/voteService';
 import { getStreak } from '../services/streakService';
-import NativeAdCard from '../components/NativeAdCard';
-import { EXTRA_AD_PLACEMENTS } from '../constants/adUnits';
-import RewardedRewardButton from '../components/RewardedRewardButton';
 import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -52,7 +49,6 @@ export default function ProfileScreen() {
   const [stats, setStats] = useState<ContributionStats | null>(null);
   const [congratsBadge, setCongratsBadge] = useState<Badge | null>(null);
   const [streak, setStreak] = useState(0);
-  const [rewardPoints, setRewardPoints] = useState<number | null>(null); // ödül modalı
 
   const scrollRef = useRef<any>(null);
   const lastStatsFetchRef = useRef(0);
@@ -67,8 +63,6 @@ export default function ProfileScreen() {
   const unlockPulse = useRef(new Animated.Value(1)).current;
   const badgeScale = useRef(new Animated.Value(0)).current;
   const sparkleAnim = useRef(new Animated.Value(0)).current;
-  const rewardScale = useRef(new Animated.Value(0)).current;
-  const rewardSparkle = useRef(new Animated.Value(0)).current;
   const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
   const welcomeAnim = useRef(new Animated.Value(0)).current;
 
@@ -132,28 +126,12 @@ export default function ProfileScreen() {
 
   const handleUnlockPress = () => {
     if (!stats?.pendingRankUp) return;
-    // Rozeti hemen aç — reklam "Devam Et" sonrasında gösterilecek
     claimRankUp(stats.pendingRankUp);
   };
 
   const handleCongratsClose = () => {
     setCongratsBadge(null);
   };
-
-  // Ödüllü reklam tamamlandı → puanları (bonus dahil) tazele + kutlama modalı
-  const handleRewardEarned = (pointsAwarded: number) => {
-    lastStatsFetchRef.current = 0; // TTL'i atla, hemen yeniden hesapla
-    getContributionStats().then(refreshStats).catch(() => {});
-    setRewardPoints(pointsAwarded);
-    rewardScale.setValue(0);
-    rewardSparkle.setValue(0);
-    Animated.parallel([
-      Animated.spring(rewardScale, { toValue: 1, friction: 5, tension: 80, useNativeDriver: true }),
-      Animated.timing(rewardSparkle, { toValue: 1, duration: 800, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const handleRewardClose = () => setRewardPoints(null);
 
   if (!stats) return <View style={[styles.container, { backgroundColor: bg }]} />;
 
@@ -266,8 +244,6 @@ export default function ProfileScreen() {
                 <Text style={{ fontSize: 15 }}>🏆</Text>
                 <Text style={[styles.sectionLabel, { color: isDark ? Colors.gray400 : Colors.gray600, marginBottom: 0 }]}>Rütbe Yolu</Text>
               </View>
-              {/* Reklam izle → +200 puan (başlığın sağında) */}
-              <RewardedRewardButton onReward={handleRewardEarned} />
             </View>
 
             {[...BADGE_TIERS].reverse().map((tier, index, arr) => {
@@ -355,9 +331,6 @@ export default function ProfileScreen() {
               );
             })}
           </View>
-
-          {/* Native reklam — Rütbe Yolu ile Tema arasında. AdMob onayına kadar KAPALI */}
-          {EXTRA_AD_PLACEMENTS && <NativeAdCard style={{ alignSelf: 'stretch' }} />}
 
           {/* Theme picker */}
           <View style={[styles.card, { backgroundColor: themeCardBg }]}>
@@ -467,62 +440,6 @@ export default function ProfileScreen() {
                 onPress={handleCongratsClose}
               >
                 <Text style={styles.modalBtnText}>Harika! Devam Et →</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </Modal>
-
-      {/* Ödül (puan kazanma) Modal */}
-      <Modal visible={rewardPoints !== null} transparent animationType="fade" onRequestClose={handleRewardClose}>
-        <View style={styles.modalOverlay}>
-          {rewardPoints !== null && (
-            <View style={[styles.modalCard, styles.rewardCard]}>
-              {/* Sparkles */}
-              <View style={styles.sparkleContainer} pointerEvents="none">
-                {SPARKLE_POSITIONS.map((pos, i) => (
-                  <Animated.Text
-                    key={i}
-                    style={[
-                      styles.sparkle,
-                      {
-                        transform: [
-                          { translateX: rewardSparkle.interpolate({ inputRange: [0, 1], outputRange: [0, pos.x] }) },
-                          { translateY: rewardSparkle.interpolate({ inputRange: [0, 1], outputRange: [0, pos.y] }) },
-                        ],
-                        opacity: rewardSparkle.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 1, 0.6] }),
-                      },
-                    ]}
-                  >
-                    {i % 2 === 0 ? '✨' : '🎉'}
-                  </Animated.Text>
-                ))}
-              </View>
-
-              <Animated.View style={[styles.rewardIconWrap, { transform: [{ scale: rewardScale }] }]}>
-                <Text style={styles.rewardIcon}>{rewardPoints > 0 ? '🎉' : '⏳'}</Text>
-              </Animated.View>
-
-              {rewardPoints > 0 ? (
-                <>
-                  <Text style={styles.rewardPointsBig}>+{rewardPoints}</Text>
-                  <Text style={styles.rewardPointsLabel}>PUAN KAZANDIN</Text>
-                  <Text style={styles.modalMessage}>
-                    Reklamı izlediğin için {rewardPoints} puan hesabına eklendi.{'\n'}
-                    Rütbe yolunda yükselmeye devam et — daha fazla puan, daha yüksek rozet! 🏆
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.modalTitle}>Bugünlük bu kadar! 👏</Text>
-                  <Text style={styles.modalMessage}>
-                    Bugünkü puan hakkını doldurdun. Yarın tekrar gelip puan kazanmaya devam edebilirsin.
-                  </Text>
-                </>
-              )}
-
-              <TouchableOpacity style={styles.modalBtn} onPress={handleRewardClose}>
-                <Text style={styles.modalBtnText}>{rewardPoints > 0 ? 'Süper! 🎉' : 'Tamam'}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -713,22 +630,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32, paddingVertical: 14, marginTop: 8,
   },
   modalBtnText: { color: Colors.white, fontWeight: '800', fontSize: 15 },
-  // Ödül (puan) modalı
-  rewardCard: {
-    borderWidth: 2,
-    borderColor: Colors.orange + '26', // ince turuncu çerçeve — uygulama temasıyla uyumlu
-  },
-  rewardIconWrap: {
-    width: 92, height: 92, borderRadius: 46,
-    backgroundColor: Colors.orange + '1A',
-    borderWidth: 3, borderColor: Colors.orange + '40',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 6,
-  },
-  rewardIcon: { fontSize: 44 },
-  rewardPointsBig: { fontSize: 48, fontWeight: '900', color: Colors.orange, marginTop: 2 },
-  rewardPointsLabel: {
-    fontSize: 13, fontWeight: '800', color: Colors.gray500,
-    letterSpacing: 2, marginTop: -4,
-  },
 });
