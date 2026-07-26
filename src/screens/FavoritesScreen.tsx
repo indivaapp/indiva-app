@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -208,16 +209,11 @@ export default function FavoritesScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           ref={flatListRef}
           data={listItems}
           keyExtractor={item => item.rowKey}
           renderItem={renderItem}
-          removeClippedSubviews={true}
-          windowSize={5}
-          maxToRenderPerBatch={4}
-          initialNumToRender={4}
-          updateCellsBatchingPeriod={30}
           contentContainerStyle={[styles.listContainer, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 80 }]}
         />
       )}

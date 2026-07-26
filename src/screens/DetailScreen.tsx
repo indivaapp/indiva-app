@@ -256,17 +256,22 @@ export default function DetailScreen({ route }: Props) {
     if (voteCalcTimerRef.current) clearTimeout(voteCalcTimerRef.current);
   }, []);
 
+  const loadDiscount = useCallback(() => {
+    setIsLoading(true);
+    setError('');
+    getDiscountById(id)
+      .then(d => {
+        if (d) { setDiscount(d); setLocalDiscount(d); }
+        else setError('İndirim detayı bulunamadı.');
+      })
+      .catch(() => setError('Yüklenirken hata oluştu.'))
+      .finally(() => setIsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   useEffect(() => {
-    if (!routeDiscount) {
-      setIsLoading(true);
-      getDiscountById(id)
-        .then(d => {
-          if (d) { setDiscount(d); setLocalDiscount(d); }
-          else setError('İndirim detayı bulunamadı.');
-        })
-        .catch(() => setError('Yüklenirken hata oluştu.'))
-        .finally(() => setIsLoading(false));
-    }
+    if (!routeDiscount) loadDiscount();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, routeDiscount]);
 
   // Görüntülenen ilanın GÜNCEL topluluk oy sayılarını Firestore'dan tazele.
@@ -535,6 +540,16 @@ export default function DetailScreen({ route }: Props) {
     return (
       <View style={[styles.center, { backgroundColor: bg, paddingTop: insets.top }]}>
         <Text style={{ color: isDark ? Colors.gray300 : Colors.gray500 }}>{error || 'İndirim bulunamadı.'}</Text>
+        {!routeDiscount && (
+          <TouchableOpacity
+            onPress={loadDiscount}
+            style={{ marginTop: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Tekrar dene"
+          >
+            <Text style={{ color: Colors.orange, fontWeight: '700' }}>Tekrar Dene</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -840,6 +855,9 @@ export default function DetailScreen({ route }: Props) {
             <TouchableOpacity
               onPress={handleToggleFavorite}
               style={[styles.actionBtn, { backgroundColor: actionBtnBg, borderColor: isFavorite ? Colors.red500 : (isDark ? Colors.gray700 : Colors.gray200) }]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isFavorite }}
+              accessibilityLabel={isFavorite ? 'Favorilendi' : 'Favorile'}
             >
               <Animated.Text style={{ fontSize: 16, transform: [{ scale: heartScale }] }}>
                 {isFavorite ? '❤️' : '🤍'}
@@ -851,6 +869,8 @@ export default function DetailScreen({ route }: Props) {
             <TouchableOpacity
               onPress={handleShare}
               style={[styles.actionBtn, { backgroundColor: actionBtnBg, borderColor: isDark ? Colors.gray700 : Colors.gray200 }]}
+              accessibilityRole="button"
+              accessibilityLabel="WhatsApp'ta paylaş"
             >
               <Text style={{ fontSize: 16 }}>💬</Text>
               <Text style={[styles.actionBtnText, { color: isDark ? Colors.gray300 : Colors.gray500 }]}>WhatsApp'ta Paylaş</Text>
@@ -869,6 +889,8 @@ export default function DetailScreen({ route }: Props) {
                   styles.codeBorder,
                   { borderColor: copied ? Colors.green500 : Colors.orange, backgroundColor: copied ? '#f0fdf4' : 'transparent' },
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={copied ? 'Kod kopyalandı' : `İndirim kodunu kopyala: ${d.discountCode}`}
               >
                 <Text style={[styles.codeText, { color: copied ? Colors.green500 : Colors.orange }]}>
                   {copied ? '✓ Kopyalandı!' : d.discountCode}
@@ -881,6 +903,8 @@ export default function DetailScreen({ route }: Props) {
           <TouchableOpacity
             onPress={handleGoToDiscount}
             disabled={isExpired && !isAd}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: isExpired && !isAd }}
             style={[
               styles.ctaBtn,
               {
@@ -916,10 +940,10 @@ export default function DetailScreen({ route }: Props) {
                     📊 Bu indirim hâlâ devam ediyor mu?
                   </Text>
                   <View style={styles.voteButtons}>
-                    <TouchableOpacity onPress={() => handleVote('active')} style={[styles.voteBtn, { backgroundColor: isDark ? '#052e16' : '#f0fdf4', borderColor: Colors.green500 }]}>
+                    <TouchableOpacity onPress={() => handleVote('active')} style={[styles.voteBtn, { backgroundColor: isDark ? '#052e16' : '#f0fdf4', borderColor: Colors.green500 }]} accessibilityRole="button" accessibilityLabel="Devam ediyor, oy ver">
                       <Text style={{ color: Colors.green500, fontWeight: '700' }}>✅ Devam Ediyor</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleVote('expired')} style={[styles.voteBtn, { backgroundColor: isDark ? '#1f0a0a' : Colors.red50, borderColor: Colors.red500 }]}>
+                    <TouchableOpacity onPress={() => handleVote('expired')} style={[styles.voteBtn, { backgroundColor: isDark ? '#1f0a0a' : Colors.red50, borderColor: Colors.red500 }]} accessibilityRole="button" accessibilityLabel="Bitti, oy ver">
                       <Text style={{ color: Colors.red500, fontWeight: '700' }}>❌ Bitti</Text>
                     </TouchableOpacity>
                   </View>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, FlatList, Image,
+  View, Text, TouchableOpacity, StyleSheet, Image,
   Modal, Dimensions, ActivityIndicator, Animated, Easing,
   Platform, NativeModules,
 } from 'react-native';
@@ -8,6 +8,7 @@ import {
   GestureHandlerRootView, PinchGestureHandler, PanGestureHandler, State,
 } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FlashList } from '@shopify/flash-list';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { fetchBrochuresByStore } from '../services/firebaseService';
@@ -271,13 +272,14 @@ export default function AktuelDetailScreen({ route }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
-      <FlatList
+      <FlashList
         data={listData}
         keyExtractor={item =>
           item.type === 'brochure' ? item.data.id
           : item.type === 'ad' ? item.adKey
           : '__footer__'
         }
+        getItemType={item => item.type}
         contentContainerStyle={[
           styles.listContainer,
           { paddingBottom: insets.bottom + 16 },
@@ -396,6 +398,8 @@ export default function AktuelDetailScreen({ route }: Props) {
                   <TouchableOpacity
                     style={[styles.navBtnLB, styles.navBtnLeft]}
                     onPress={() => changeLightboxIndex(lightboxIndex - 1, 'prev')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Önceki sayfa"
                   >
                     <Text style={styles.navBtnText}>‹</Text>
                   </TouchableOpacity>
@@ -404,6 +408,8 @@ export default function AktuelDetailScreen({ route }: Props) {
                   <TouchableOpacity
                     style={[styles.navBtnLB, styles.navBtnRight]}
                     onPress={() => changeLightboxIndex(lightboxIndex + 1, 'next')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sonraki sayfa"
                   >
                     <Text style={styles.navBtnText}>›</Text>
                   </TouchableOpacity>
@@ -413,6 +419,8 @@ export default function AktuelDetailScreen({ route }: Props) {
                 <TouchableOpacity
                   style={styles.closeBtnLB}
                   onPress={closeLightbox}
+                  accessibilityRole="button"
+                  accessibilityLabel="Kapat"
                 >
                   <Text style={{ color: Colors.white, fontSize: 18, fontWeight: '800' }}>✕</Text>
                 </TouchableOpacity>
@@ -426,14 +434,13 @@ export default function AktuelDetailScreen({ route }: Props) {
 
                 {/* Küçük resim şeridi */}
                 <View style={styles.thumbBar}>
-                  <FlatList
+                  <FlashList
                     ref={thumbListRef}
                     data={brochures}
                     horizontal
                     keyExtractor={item => item.id}
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}
-                    getItemLayout={(_, index) => ({ length: 52, offset: (52 + 8) * index + 12, index })}
                     renderItem={({ item, index }) => (
                       <TouchableOpacity
                         onPress={() => {
