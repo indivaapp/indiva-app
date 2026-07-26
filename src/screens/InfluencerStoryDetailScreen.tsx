@@ -66,6 +66,12 @@ export default function StoryDetailScreen({ route }: Props) {
   const [imageLoading, setImageLoading] = useState(true);
   const [backdropReady, setBackdropReady] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Gelen (incoming) panel her zaman DOM'da kalıyor — sadece hedef story
+  // değişiyor. Kaydırma/otomatik geçişte önceki story'nin görseli, yenisi
+  // yüklenene kadar donuk kalıp aniden değişiyordu ("flaş" şikayeti) çünkü bu
+  // katmanda hiç yükleme koruması yoktu. incomingLoaded, hedef değiştiğinde
+  // sıfırlanıp gerçek onLoad'a kadar görseli gizli tutar.
+  const [incomingLoaded, setIncomingLoaded] = useState(false);
 
   // transitionStoryIndex: incoming story panel index during a slide transition (null = idle)
   const [transitionStoryIndex, setTransitionStoryIndex] = useState<number | null>(null);
@@ -82,6 +88,12 @@ export default function StoryDetailScreen({ route }: Props) {
     transitionStoryIndex !== null
       ? stories[transitionStoryIndex]
       : (stories[currentIndex + 1] ?? story);
+
+  // Hedef değişince (ör. kullanıcı hızlıca birkaç story ilerlerken idle
+  // preview sürekli günceleniyor) yükleme durumunu sıfırla — bkz. incomingLoaded.
+  useEffect(() => {
+    setIncomingLoaded(false);
+  }, [incomingPanelStory.productImage]);
 
   // ── Animation values ────────────────────────────────────────────
   // progressAnims drive scaleX (0→1) on the progress fill, anchored left
@@ -313,9 +325,13 @@ export default function StoryDetailScreen({ route }: Props) {
       }
       // Panel stays at x=0 covering the screen. Positions are reset in the
       // currentIndex useEffect, after React commits the new story to DOM.
+      // NOT: setImageLoading(false) burada ARTIK zorlanmıyor — gerçek görsel
+      // henüz yüklenmemişken shimmer'ı erken gizleyip "önceki görüntü donuk
+      // kalıp sonra flaşla değişiyor" hissine yol açıyordu. Artık ana katmanın
+      // onLoadStart/onLoad döngüsü (aşağıda) gerçek durumu yönetiyor; incoming
+      // panel zaten kendi incomingLoaded state'iyle (yukarıda) korunuyor.
       imageReadyRef.current = true;
       pendingStartRef.current = false;
-      setImageLoading(false);
       postTransitionRef.current = true;
       setCurrentIndex(nextIndex);
     });
@@ -380,10 +396,16 @@ export default function StoryDetailScreen({ route }: Props) {
   // Warming the next/prev URIs in the native image cache means swipes
   // and auto-advances render instantly instead of waiting on the network.
   useEffect(() => {
-    const next = stories[currentIndex + 1]?.productImage;
-    const prev = stories[currentIndex - 1]?.productImage;
-    if (next) Image.prefetch(next).catch(() => {});
-    if (prev) Image.prefetch(prev).catch(() => {});
+    // 2'şer story ileri/geri — hızlı art arda kaydırmalarda (kullanıcı bir
+    // sonrakini beklemeden hemen tekrar kaydırırsa) tampon bıraksın diye
+    // sadece bitişik komşu değil, bir sonrakini de önceden ısıtıyoruz.
+    const uris = [
+      stories[currentIndex + 1]?.productImage,
+      stories[currentIndex + 2]?.productImage,
+      stories[currentIndex - 1]?.productImage,
+      stories[currentIndex - 2]?.productImage,
+    ].filter((u): u is string => !!u);
+    uris.forEach(u => { Image.prefetch(u).catch(() => {}); });
   }, [currentIndex, stories]);
 
   // ── Tap zone gesture handlers ───────────────────────────────────
@@ -954,10 +976,16 @@ export default function StoryDetailScreen({ route }: Props) {
           blurRadius={14}
         />
         <View style={styles.blurScrim} />
+        {/* Gerçek onLoad'a kadar opak arka plan — altındaki (bir önceki
+            hedefin) donmuş görseli göstermek yerine düz koyu zemin gösterir. */}
+        {!incomingLoaded && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: '#181818' }]} />
+        )}
         <Image
           source={{ uri: incomingPanelStory.productImage }}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { opacity: incomingLoaded ? 1 : 0 }]}
           resizeMode="contain"
+          onLoad={() => setIncomingLoaded(true)}
         />
       </Animated.View>
 
@@ -1026,7 +1054,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    // Eskiden yarı saydamdı (rgba(0,0,0,0.3)) — altındaki eski/donuk görsel
+    // hafifçe kararmış halde görünmeye devam ediyordu. Opak yapıldı ki
+    // yükleme sırasında önceki görsel tamamen gizlensin.
+    backgroundColor: '#181818',
     zIndex: 2,
   },
   counterText: {
