@@ -339,6 +339,7 @@ export default function AktuelDetailScreen({ route }: Props) {
                       ]}
                     >
                       <Animated.Image
+                        key={brochures[lightboxIndex].imageUrl}
                         source={{ uri: brochures[lightboxIndex].imageUrl }}
                         style={[
                           styles.lightboxImage,

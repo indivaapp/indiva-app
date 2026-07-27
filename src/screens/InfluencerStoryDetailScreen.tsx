@@ -734,6 +734,7 @@ export default function StoryDetailScreen({ route }: Props) {
           <View style={[StyleSheet.absoluteFill, { backgroundColor: '#181818' }]} />
         )}
         <Image
+          key={story.productImage}
           source={{ uri: story.productImage }}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
@@ -760,6 +761,7 @@ export default function StoryDetailScreen({ route }: Props) {
       >
         {/* ══ LAYER 1: Blurred backdrop (current story, cover+blur) ═══════ */}
         <Image
+          key={story.productImage}
           source={{ uri: story.productImage }}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
@@ -770,6 +772,7 @@ export default function StoryDetailScreen({ route }: Props) {
 
         {/* ══ LAYER 2: Main image (contain, events handled here) ══════════ */}
         <Image
+          key={story.productImage}
           source={{ uri: story.productImage }}
           style={{ position: 'absolute', width: SCREEN_W, height: SCREEN_H }}
           resizeMode="contain"
@@ -962,6 +965,7 @@ export default function StoryDetailScreen({ route }: Props) {
         ]}
       >
         <Image
+          key={`blur-${incomingPanelStory.productImage}`}
           source={{ uri: incomingPanelStory.productImage }}
           style={StyleSheet.absoluteFill}
           resizeMode="cover"
@@ -974,6 +978,7 @@ export default function StoryDetailScreen({ route }: Props) {
           <View style={[StyleSheet.absoluteFill, { backgroundColor: '#181818' }]} />
         )}
         <Image
+          key={`main-${incomingPanelStory.productImage}`}
           source={{ uri: incomingPanelStory.productImage }}
           style={[StyleSheet.absoluteFill, { opacity: incomingLoaded ? 1 : 0 }]}
           resizeMode="contain"
