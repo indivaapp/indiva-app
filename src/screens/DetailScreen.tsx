@@ -36,6 +36,7 @@ import DiscountCard from '../components/DiscountCard';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import { haptic } from '../utils/haptics';
+import { timeAgoFromTs } from '../utils/time';
 import type { RootStackParamList } from '../navigation';
 import type { Discount } from '../types';
 
@@ -50,19 +51,9 @@ const getFavoriteIds = async (): Promise<string[]> => {
 };
 
 
-function timeAgoStr(createdAt: any): string {
-  if (!createdAt) return '';
-  const ms = typeof createdAt.toMillis === 'function'
-    ? createdAt.toMillis()
-    : createdAt.seconds ? createdAt.seconds * 1000 : 0;
-  if (!ms) return '';
-  const diff = Math.floor((Date.now() - ms) / 60000);
-  if (diff < 1) return 'Az önce';
-  if (diff < 60) return `${diff} dk önce`;
-  const h = Math.floor(diff / 60);
-  if (h < 24) return `${h} sa önce`;
-  return `${Math.floor(h / 24)} gün önce`;
-}
+// Firestore Timestamp'in yanı sıra AsyncStorage cache'inden (JSON round-trip)
+// veya ISO string olarak gelen createdAt değerlerini de doğru işler (bkz. utils/time.ts).
+const timeAgoStr = timeAgoFromTs;
 
 export default function DetailScreen({ route }: Props) {
   const { id, discount: routeDiscount, discountList: routeList, direction } = route.params;

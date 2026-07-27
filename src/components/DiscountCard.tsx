@@ -15,6 +15,7 @@ import OptimizedImage from './OptimizedImage';
 import { Colors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
 import { haptic } from '../utils/haptics';
+import { timeAgoFromTs } from '../utils/time';
 import type { RootStackParamList } from '../navigation';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
@@ -97,23 +98,10 @@ const DiscountCardInner: React.FC<DiscountCardProps> = ({
     [discount.oldPrice, discount.newPrice]
   );
 
-  const timeAgo = useMemo((): string => {
-    const ct = discount.createdAt as any;
-    if (!ct) return '';
-    const ms =
-      typeof ct.toMillis === 'function'
-        ? ct.toMillis()
-        : ct.seconds
-        ? ct.seconds * 1000
-        : 0;
-    if (!ms) return '';
-    const diff = Math.floor((Date.now() - ms) / 60000);
-    if (diff < 1) return 'Az önce';
-    if (diff < 60) return `${diff} dk önce`;
-    const h = Math.floor(diff / 60);
-    if (h < 24) return `${h} sa önce`;
-    return `${Math.floor(h / 24)} gün önce`;
-  }, [discount.createdAt]);
+  // Firestore Timestamp'in yanı sıra AsyncStorage cache'inden (JSON round-trip)
+  // veya ISO string olarak gelen createdAt değerlerini de doğru işler — eski
+  // yerel kopya bu şekilleri tanımayıp sessizce boş dönüyordu (bkz. utils/time.ts).
+  const timeAgo = useMemo(() => timeAgoFromTs(discount.createdAt), [discount.createdAt]);
 
   if (isHidden) return null;
 
